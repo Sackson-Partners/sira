@@ -1,0 +1,80 @@
+# SIRA Platform - Phase 2 Local Development Stack
+# Docker Compose: All microservices for local dev
+# Auth: Supabase JWT | Frontend: Next.js on Vercel
+# Azure prod target: Resource Group sira-rg, Container Apps
+
+version: '3.9'
+
+networks:
+  sira-network:
+      driver: bridge
+
+      volumes:
+        postgres-data:
+          redis-data:
+
+          services:
+            postgres:
+                image: timescale/timescaledb-ha:pg15-latest
+                    container_name: sira-postgres
+                        environment:
+                              POSTGRES_DB: sira_db
+                                    POSTGRES_USER: sira
+                                          POSTGRES_PASSWORD: sira_dev_password
+                                              ports: ['5432:5432']
+                                                  volumes:
+                                                        - postgres-data:/var/lib/postgresql/data
+                                                              - ./supabase/migrations:/docker-entrypoint-initdb.d:ro
+                                                                  networks: [sira-network]
+                                                                      healthcheck:
+                                                                            test: ['CMD-SHELL', 'pg_isready -U sira -d sira_db']
+                                                                                  interval: 10s
+                                                                                        retries: 5
+
+                                                                                          redis:
+                                                                                              image: redis:7-alpine
+                                                                                                  container_name: sira-redis
+                                                                                                      ports: ['6379:6379']
+                                                                                                          networks: [sira-network]
+                                                                                                          
+                                                                                                            api-gateway:
+                                                                                                                build:
+                                                                                                                      context: ./backend
+                                                                                                                            dockerfile: Dockerfile
+                                                                                                                                container_name: sira-api
+                                                                                                                                    ports: ['8000:8000']
+                                                                                                                                        env_file: [.env.phase2]
+                                                                                                                                            depends_on:
+                                                                                                                                                  postgres: {condition: service_healthy}
+                                                                                                                                                      networks: [sira-network]
+                                                                                                                                                          volumes: ['./backend:/app']
+                                                                                                                                                          
+                                                                                                                                                            telematics-worker:
+                                                                                                                                                                build:
+                                                                                                                                                                      context: ./backend
+                                                                                                                                                                            dockerfile: services/telematics/Dockerfile
+                                                                                                                                                                                container_name: sira-telematics
+                                                                                                                                                                                    env_file: [.env.phase2]
+                                                                                                                                                                                        depends_on:
+                                                                                                                                                                                              postgres: {condition: service_healthy}
+                                                                                                                                                                                                  networks: [sira-network]
+                                                                                                                                                                                                  
+                                                                                                                                                                                                    maritime-worker:
+                                                                                                                                                                                                        build:
+                                                                                                                                                                                                              context: ./backend
+                                                                                                                                                                                                                    dockerfile: services/maritime/Dockerfile
+                                                                                                                                                                                                                        container_name: sira-maritime
+                                                                                                                                                                                                                            env_file: [.env.phase2]
+                                                                                                                                                                                                                                depends_on:
+                                                                                                                                                                                                                                      postgres: {condition: service_healthy}
+                                                                                                                                                                                                                                          networks: [sira-network]
+                                                                                                                                                                                                                                          
+                                                                                                                                                                                                                                            ai-worker:
+                                                                                                                                                                                                                                                build:
+                                                                                                                                                                                                                                                      context: ./backend
+                                                                                                                                                                                                                                                            dockerfile: services/ai/Dockerfile
+                                                                                                                                                                                                                                                                container_name: sira-ai
+                                                                                                                                                                                                                                                                    env_file: [.env.phase2]
+                                                                                                                                                                                                                                                                        depends_on:
+                                                                                                                                                                                                                                                                              postgres: {condition: service_healthy}
+                                                                                                                                                                                                                                                                                  networks: [sira-network]
