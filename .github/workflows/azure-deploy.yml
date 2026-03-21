@@ -15,7 +15,7 @@ on:
 
 env:
   AZURE_RESOURCE_GROUP: sira-rg
-  AZURE_LOCATION: westeurope
+  AZURE_LOCATION: southafricanorth
   DOCKERHUB_USERNAME: sacksons
   REGISTRY: docker.io/sacksons
 
