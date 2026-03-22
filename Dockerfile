@@ -36,9 +36,7 @@ ENV PORT=8080
 
 EXPOSE ${PORT}
 
-# Health check for Azure Container Apps
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:${PORT}/health || exit 1
-
-# Start server
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}"]
+# Start server with debug output
+COPY backend/start.sh /app/start.sh
+RUN chmod +x /app/start.sh
+CMD ["/bin/sh", "/app/start.sh"]

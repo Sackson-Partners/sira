@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     LOG_LEVEL: str = "INFO"
 
-    # Database - defaults to SQLite for local dev, override with PostgreSQL for production
+    # Database — defaults to SQLite if DATABASE_URL not set (e.g. Railway without Postgres addon)
     DATABASE_URL: str = "sqlite:///./sira.db"
     DB_POOL_SIZE: int = 10
     DB_MAX_OVERFLOW: int = 20

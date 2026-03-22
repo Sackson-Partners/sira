@@ -6,6 +6,7 @@ __pycache__/
 *.db
 venv/
 node_modules/
+frontend/node_modules/
 *.md
 .env
 .env.local

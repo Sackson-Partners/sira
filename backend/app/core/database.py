@@ -31,6 +31,7 @@ else:
         max_overflow=settings.DB_MAX_OVERFLOW,
         poolclass=QueuePool,
         echo=settings.DEBUG,
+        connect_args={"connect_timeout": 5},
     )
 
 # Session factory

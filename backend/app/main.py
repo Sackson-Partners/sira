@@ -18,7 +18,9 @@ from app.core.config import settings
 from app.core.database import init_db, engine, Base
 from app.api import api_router
 
-# Frontend dist directory - works in both Docker (/app/frontend/dist) and local dev
+# Frontend dist directory
+# Docker: /app/app/main.py → parent.parent = /app → /app/frontend/dist
+# Local:  backend/app/main.py → parent.parent = backend/ → need to go up one more
 _app_dir = Path(__file__).resolve().parent.parent
 FRONTEND_DIR = _app_dir / "frontend" / "dist"
 if not FRONTEND_DIR.exists():
@@ -161,17 +163,30 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 
-# Health check endpoint
+# Health check endpoint — must respond fast for Railway healthcheck
 @app.get("/health", tags=["Health"])
 async def health_check():
     """Health check endpoint for monitoring and Azure probes"""
     from datetime import datetime, timezone
 
-    return {
+    result = {
         "status": "healthy",
         "version": settings.APP_VERSION,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
+
+    # Try DB check but don't block if it's slow/unavailable
+    try:
+        from app.core.database import check_db_connection
+        db_ok = check_db_connection()
+        result["database"] = "healthy" if db_ok else "unhealthy"
+        if not db_ok:
+            result["status"] = "degraded"
+    except Exception as e:
+        result["database"] = f"error: {e}"
+        result["status"] = "degraded"
+
+    return result
 
 
 # Integration status endpoint
