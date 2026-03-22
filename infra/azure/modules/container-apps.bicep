@@ -11,6 +11,15 @@ param environment string
 @description('Docker Hub image registry')
 param registry string = 'docker.io/sacksons'
 
+@description('Database URL for API (defaults to SQLite for zero-config startup)')
+param databaseUrl string = 'sqlite:///./sira.db'
+
+@description('Secret key for JWT signing')
+param secretKey string = 'sira-secret-key-change-in-production-min-32-chars-ok'
+
+@description('Allowed CORS origins (comma-separated)')
+param allowedOrigins string = '*'
+
 // ---------------------------------------------------------------------------
 // Log Analytics Workspace
 // ---------------------------------------------------------------------------
@@ -62,10 +71,23 @@ resource apiGateway 'Microsoft.App/containerApps@2023-05-01' = {
       containers: [{
         name: 'api-gateway'
         image: '${registry}/sira-api:latest'
-        resources: { cpu: json('0.5'), memory: '1Gi' }
-        env: [{ name: 'ENVIRONMENT', value: environment }]
+        resources: {
+          cpu: json('0.5')
+          memory: '1Gi'
+        }
+        env: [
+          { name: 'ENVIRONMENT',    value: environment }
+          { name: 'DATABASE_URL',   value: databaseUrl }
+          { name: 'SECRET_KEY',     value: secretKey }
+          { name: 'ALLOWED_ORIGINS', value: allowedOrigins }
+          { name: 'LOG_LEVEL',      value: 'INFO' }
+          { name: 'PORT',           value: '8000' }
+        ]
       }]
-      scale: { minReplicas: 1, maxReplicas: 5 }
+      scale: {
+        minReplicas: 1
+        maxReplicas: 5
+      }
     }
   }
   tags: { project: 'SIRA', environment: environment }
@@ -79,15 +101,27 @@ resource telematicsWorker 'Microsoft.App/containerApps@2023-05-01' = {
   location: location
   properties: {
     managedEnvironmentId: containerAppsEnv.id
-    configuration: { activeRevisionsMode: 'Single' }
+    configuration: {
+      activeRevisionsMode: 'Single'
+    }
     template: {
       containers: [{
         name: 'telematics-worker'
         image: '${registry}/sira-telematics:latest'
-        resources: { cpu: json('0.25'), memory: '0.5Gi' }
-        env: [{ name: 'ENVIRONMENT', value: environment }]
+        resources: {
+          cpu: json('0.25')
+          memory: '0.5Gi'
+        }
+        env: [
+          { name: 'ENVIRONMENT', value: environment }
+          { name: 'DATABASE_URL', value: databaseUrl }
+          { name: 'SECRET_KEY',   value: secretKey }
+        ]
       }]
-      scale: { minReplicas: 1, maxReplicas: 1 }
+      scale: {
+        minReplicas: 1
+        maxReplicas: 1
+      }
     }
   }
   tags: { project: 'SIRA', environment: environment }
@@ -101,15 +135,27 @@ resource maritimeWorker 'Microsoft.App/containerApps@2023-05-01' = {
   location: location
   properties: {
     managedEnvironmentId: containerAppsEnv.id
-    configuration: { activeRevisionsMode: 'Single' }
+    configuration: {
+      activeRevisionsMode: 'Single'
+    }
     template: {
       containers: [{
         name: 'maritime-worker'
         image: '${registry}/sira-maritime:latest'
-        resources: { cpu: json('0.25'), memory: '0.5Gi' }
-        env: [{ name: 'ENVIRONMENT', value: environment }]
+        resources: {
+          cpu: json('0.25')
+          memory: '0.5Gi'
+        }
+        env: [
+          { name: 'ENVIRONMENT', value: environment }
+          { name: 'DATABASE_URL', value: databaseUrl }
+          { name: 'SECRET_KEY',   value: secretKey }
+        ]
       }]
-      scale: { minReplicas: 1, maxReplicas: 3 }
+      scale: {
+        minReplicas: 1
+        maxReplicas: 3
+      }
     }
   }
   tags: { project: 'SIRA', environment: environment }
@@ -123,15 +169,27 @@ resource aiWorker 'Microsoft.App/containerApps@2023-05-01' = {
   location: location
   properties: {
     managedEnvironmentId: containerAppsEnv.id
-    configuration: { activeRevisionsMode: 'Single' }
+    configuration: {
+      activeRevisionsMode: 'Single'
+    }
     template: {
       containers: [{
         name: 'ai-worker'
         image: '${registry}/sira-ai:latest'
-        resources: { cpu: json('0.5'), memory: '1Gi' }
-        env: [{ name: 'ENVIRONMENT', value: environment }]
+        resources: {
+          cpu: json('0.5')
+          memory: '1Gi'
+        }
+        env: [
+          { name: 'ENVIRONMENT', value: environment }
+          { name: 'DATABASE_URL', value: databaseUrl }
+          { name: 'SECRET_KEY',   value: secretKey }
+        ]
       }]
-      scale: { minReplicas: 1, maxReplicas: 5 }
+      scale: {
+        minReplicas: 1
+        maxReplicas: 5
+      }
     }
   }
   tags: { project: 'SIRA', environment: environment }
