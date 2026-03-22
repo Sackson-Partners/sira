@@ -89,8 +89,8 @@ jobs:
       - name: Deploy Bicep Infrastructure
         uses: azure/arm-deploy@v2
         with:
-          scope: subscription
-          subscriptionId: e919967a-c8ff-4896-977b-360167fa1a84
+          scope: resourcegroup
+          resourceGroupName: ${{ env.AZURE_RESOURCE_GROUP }}
           region: ${{ env.AZURE_LOCATION }}
           template: infra/azure/main.bicep
           parameters: location=${{ env.AZURE_LOCATION }} environment=${{ github.event_name == 'push' && contains(github.ref, 'refs/tags') && 'prod' || 'staging' }}
