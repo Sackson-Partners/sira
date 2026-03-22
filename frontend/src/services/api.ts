@@ -194,3 +194,43 @@ export const marketApi = {
     api.get('/api/v1/market/demurrage/', { params }),
   getDemurrageExposure: () => api.get('/api/v1/market/demurrage/exposure'),
 }
+
+// Phase 2: Flespi Telematics
+export const telemetryApi = {
+  getStatus: () => api.get('/api/v1/telemetry/status'),
+  getDevices: () => api.get('/api/v1/telemetry/devices'),
+  getDeviceTelemetry: (deviceId: number) =>
+    api.get(`/api/v1/telemetry/devices/${deviceId}/telemetry`),
+  getDeviceMessages: (deviceId: number, limit?: number) =>
+    api.get(`/api/v1/telemetry/devices/${deviceId}/messages`, { params: { limit } }),
+  syncDevices: () => api.post('/api/v1/telemetry/sync-devices'),
+}
+
+// Phase 2: MarineTraffic AIS
+export const aisApi = {
+  getStatus: () => api.get('/api/v1/ais/status'),
+  getVesselPosition: (mmsi: string) => api.get(`/api/v1/ais/vessel/${mmsi}`),
+  getFleetPositions: () => api.get('/api/v1/ais/fleet'),
+  getVesselDetails: (imo: string) => api.get(`/api/v1/ais/vessel/${imo}/details`),
+  syncPositions: () => api.post('/api/v1/ais/sync-positions'),
+}
+
+// Phase 2: AI Intelligence Engine
+export const aiApi = {
+  getStatus: () => api.get('/api/v1/ai/status'),
+  chat: (message: string, history?: Array<{ role: string; content: string }>) =>
+    api.post('/api/v1/ai/chat', { message, history }),
+  predictETA: (data: {
+    origin: string; destination: string; departure_time: string;
+    vessel_speed?: number; weather_conditions?: string;
+  }) => api.post('/api/v1/ai/predict-eta', data),
+  analyzeRisk: (data: { shipment_id?: number; shipment_data?: any }) =>
+    api.post('/api/v1/ai/analyze-risk', data),
+  demurrageRisk: (vessel_data: any, port_data: any) =>
+    api.post('/api/v1/ai/demurrage-risk', { vessel_data, port_data }),
+}
+
+// Phase 2: Integration health
+export const integrationsApi = {
+  getStatus: () => api.get('/health/integrations'),
+}
