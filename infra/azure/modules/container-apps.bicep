@@ -1,54 +1,26 @@
 // SIRA Platform - Azure Container Apps Module
 // Resource Group: sira-rg | Phase 2 MVP
-// Deploys: ACR, Container Apps Environment, API Gateway, Telematics Worker,
-//          Maritime Worker, AI Worker, Scheduler, Key Vault, Log Analytics
+// Uses Docker Hub (docker.io/sacksons) - no ACR dependency
 
 @description('Azure region')
-  param location string
+param location string
 
 @description('Environment tag')
 param environment string
 
-@description('Azure Container Registry name')
-param acrName string
+@description('Docker Hub image registry')
+param registry string = 'docker.io/sacksons'
 
 // ---------------------------------------------------------------------------
 // Log Analytics Workspace
 // ---------------------------------------------------------------------------
 resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
-    name: 'sira-logs-${environment}'
-    location: location
+  name: 'sira-logs-${environment}'
+  location: location
   properties: {
     sku: { name: 'PerGB2018' }
     retentionInDays: 30
-      }
-  tags: { project: 'SIRA', environment: environment }
-}
-
-// ---------------------------------------------------------------------------
-// Azure Container Registry
-// ---------------------------------------------------------------------------
-resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
-  name: acrName
-      location: location
-      sku: { name: 'Basic' }
-  properties: { adminUserEnabled: true }
-  tags: { project: 'SIRA', environment: environment }
-}
-
-// ---------------------------------------------------------------------------
-// Key Vault
-// ---------------------------------------------------------------------------
-resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
-  name: 'sira-kv-${uniqueString(resourceGroup().id)}'
-      location: location
-  properties: {
-    sku: { family: 'A', name: 'standard' }
-    tenantId: subscription().tenantId
-          enableRbacAuthorization: true
-          enableSoftDelete: true
-          softDeleteRetentionInDays: 7
-      }
+  }
   tags: { project: 'SIRA', environment: environment }
 }
 
@@ -57,14 +29,14 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
 // ---------------------------------------------------------------------------
 resource containerAppsEnv 'Microsoft.App/managedEnvironments@2023-05-01' = {
   name: 'sira-cae-${environment}'
-      location: location
+  location: location
   properties: {
     appLogsConfiguration: {
       destination: 'log-analytics'
-              logAnalyticsConfiguration: {
+      logAnalyticsConfiguration: {
         customerId: logAnalytics.properties.customerId
-                  sharedKey: logAnalytics.listKeys().primarySharedKey
-          }
+        sharedKey: logAnalytics.listKeys().primarySharedKey
+      }
     }
   }
   tags: { project: 'SIRA', environment: environment }
@@ -75,71 +47,45 @@ resource containerAppsEnv 'Microsoft.App/managedEnvironments@2023-05-01' = {
 // ---------------------------------------------------------------------------
 resource apiGateway 'Microsoft.App/containerApps@2023-05-01' = {
   name: 'sira-api-${environment}'
-      location: location
+  location: location
   properties: {
     managedEnvironmentId: containerAppsEnv.id
-          configuration: {
-        activeRevisionsMode: 'Single'
-                ingress: {
+    configuration: {
+      activeRevisionsMode: 'Single'
+      ingress: {
         external: true
-                  targetPort: 8000
-                  transport: 'http'
-                  corsPolicy: {
-          allowedOrigins: ['https://sira-teal.vercel.app', 'https://*.vercel.app']
-                      allowedMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
-                      allowedHeaders: ['*']
-                      allowCredentials: true
-            }
-        }
-      registries: [{ server: acr.properties.loginServer, username: acr.name, passwordSecretRef: 'acr-password' }]
-      secrets: [{ name: 'acr-password', value: acr.listCredentials().passwords[0].value }]
-        }
+        targetPort: 8000
+        transport: 'http'
+      }
+    }
     template: {
       containers: [{
         name: 'api-gateway'
-                  image: '${acr.properties.loginServer}/sira-api:latest'
-                  resources: { cpu: json('0.5'), memory: '1Gi' }
-        env: [
-{ name: 'ENVIRONMENT', value: environment }
-          { name: 'DATABASE_URL', secretRef: 'database-url' }
-{ name: 'SUPABASE_URL', secretRef: 'supabase-url' }
-{ name: 'SUPABASE_JWT_SECRET', secretRef: 'supabase-jwt-secret' }
-{ name: 'CLAUDE_API_KEY', secretRef: 'claude-api-key' }
-{ name: 'MAPBOX_SECRET_TOKEN', secretRef: 'mapbox-secret-token' }
-        ]
+        image: '${registry}/sira-api:latest'
+        resources: { cpu: json('0.5'), memory: '1Gi' }
+        env: [{ name: 'ENVIRONMENT', value: environment }]
       }]
-      scale: {
-        minReplicas: 2
-                  maxReplicas: 10
-                  rules: [{ name: 'cpu-scale', custom: { type: 'cpu', metadata: { type: 'Utilization', value: '70' } } }]
-          }
+      scale: { minReplicas: 1, maxReplicas: 5 }
     }
   }
   tags: { project: 'SIRA', environment: environment }
 }
 
 // ---------------------------------------------------------------------------
-// Telematics Worker (always-on MQTT ingestion)
+// Telematics Worker
 // ---------------------------------------------------------------------------
 resource telematicsWorker 'Microsoft.App/containerApps@2023-05-01' = {
   name: 'sira-telematics-${environment}'
-      location: location
+  location: location
   properties: {
     managedEnvironmentId: containerAppsEnv.id
-          configuration: {
-      activeRevisionsMode: 'Single'
-              registries: [{ server: acr.properties.loginServer, username: acr.name, passwordSecretRef: 'acr-password' }]
-      secrets: [{ name: 'acr-password', value: acr.listCredentials().passwords[0].value }]
-        }
+    configuration: { activeRevisionsMode: 'Single' }
     template: {
       containers: [{
         name: 'telematics-worker'
-                  image: '${acr.properties.loginServer}/sira-telematics:latest'
-                  resources: { cpu: json('0.25'), memory: '0.5Gi' }
-        env: [
-{ name: 'FLESPI_TOKEN', secretRef: 'flespi-token' }
-          { name: 'DATABASE_URL', secretRef: 'database-url' }
-        ]
+        image: '${registry}/sira-telematics:latest'
+        resources: { cpu: json('0.25'), memory: '0.5Gi' }
+        env: [{ name: 'ENVIRONMENT', value: environment }]
       }]
       scale: { minReplicas: 1, maxReplicas: 1 }
     }
@@ -148,27 +94,20 @@ resource telematicsWorker 'Microsoft.App/containerApps@2023-05-01' = {
 }
 
 // ---------------------------------------------------------------------------
-// Maritime Worker (MarineTraffic polling)
+// Maritime Worker
 // ---------------------------------------------------------------------------
 resource maritimeWorker 'Microsoft.App/containerApps@2023-05-01' = {
   name: 'sira-maritime-${environment}'
-      location: location
+  location: location
   properties: {
     managedEnvironmentId: containerAppsEnv.id
-          configuration: {
-      activeRevisionsMode: 'Single'
-              registries: [{ server: acr.properties.loginServer, username: acr.name, passwordSecretRef: 'acr-password' }]
-      secrets: [{ name: 'acr-password', value: acr.listCredentials().passwords[0].value }]
-        }
+    configuration: { activeRevisionsMode: 'Single' }
     template: {
       containers: [{
         name: 'maritime-worker'
-                  image: '${acr.properties.loginServer}/sira-maritime:latest'
-                  resources: { cpu: json('0.25'), memory: '0.5Gi' }
-        env: [
-{ name: 'MARINE_TRAFFIC_API_KEY', secretRef: 'marine-traffic-api-key' }
-          { name: 'DATABASE_URL', secretRef: 'database-url' }
-        ]
+        image: '${registry}/sira-maritime:latest'
+        resources: { cpu: json('0.25'), memory: '0.5Gi' }
+        env: [{ name: 'ENVIRONMENT', value: environment }]
       }]
       scale: { minReplicas: 1, maxReplicas: 3 }
     }
@@ -181,24 +120,16 @@ resource maritimeWorker 'Microsoft.App/containerApps@2023-05-01' = {
 // ---------------------------------------------------------------------------
 resource aiWorker 'Microsoft.App/containerApps@2023-05-01' = {
   name: 'sira-ai-worker-${environment}'
-      location: location
+  location: location
   properties: {
     managedEnvironmentId: containerAppsEnv.id
-          configuration: {
-      activeRevisionsMode: 'Single'
-              registries: [{ server: acr.properties.loginServer, username: acr.name, passwordSecretRef: 'acr-password' }]
-      secrets: [{ name: 'acr-password', value: acr.listCredentials().passwords[0].value }]
-        }
+    configuration: { activeRevisionsMode: 'Single' }
     template: {
       containers: [{
         name: 'ai-worker'
-                  image: '${acr.properties.loginServer}/sira-ai:latest'
-                  resources: { cpu: json('0.5'), memory: '1Gi' }
-        env: [
-{ name: 'CLAUDE_API_KEY', secretRef: 'claude-api-key' }
-          { name: 'OPENAI_API_KEY', secretRef: 'openai-api-key' }
-{ name: 'DATABASE_URL', secretRef: 'database-url' }
-        ]
+        image: '${registry}/sira-ai:latest'
+        resources: { cpu: json('0.5'), memory: '1Gi' }
+        env: [{ name: 'ENVIRONMENT', value: environment }]
       }]
       scale: { minReplicas: 1, maxReplicas: 5 }
     }
@@ -210,6 +141,5 @@ resource aiWorker 'Microsoft.App/containerApps@2023-05-01' = {
 // Outputs
 // ---------------------------------------------------------------------------
 output containerAppsEnvId string = containerAppsEnv.id
-  output acrLoginServer string = acr.properties.loginServer
-  output keyVaultUri string = keyVault.properties.vaultUri
-  output apiGatewayFqdn string = apiGateway.properties.configuration.ingress.fqdn
+output acrLoginServer string = registry
+output apiGatewayFqdn string = apiGateway.properties.configuration.ingress.fqdn
