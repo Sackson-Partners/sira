@@ -144,7 +144,7 @@ jobs:
           imageToDeploy: ${{ env.REGISTRY }}/sira-ai:${{ needs.build-and-push.outputs.image-tag }}
 
       - name: Smoke test API health
-      - continue-on-error: true
+        continue-on-error: true
         run: |
           sleep 30
           API_FQDN=$(az containerapp show --name sira-api-${{ steps.env.outputs.env }} --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --query properties.configuration.ingress.fqdn -o tsv)
