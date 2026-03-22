@@ -34,7 +34,7 @@ python-dotenv==1.0.0
 websockets==12.0
 
 # AI Integrations
-anthropic==0.34.0
+anthropic==0.42.0
 openai==1.47.0
 Pillow>=10.0.0
 
@@ -67,15 +67,6 @@ redis==5.0.8
 
 # Task Queue (optional, for AI workers)
 celery==5.4.0
-
-# --- Phase 2: External Integrations ---
-
-# AI Intelligence Engine
-anthropic==0.42.0
-openai==1.12.0
-
-# MQTT (Flespi telematics)
-aiomqtt==2.0.0
 
 # Scheduling
 apscheduler==3.10.4
