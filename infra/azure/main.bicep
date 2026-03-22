@@ -11,6 +11,9 @@ param location string = 'southafricanorth'
 @description('Environment: dev, staging, prod')
 param environment string = 'staging'
 
+@description('Docker Hub registry')
+param registry string = 'docker.io/sacksons'
+
 // ---------------------------------------------------------------------------
 // Deploy resources into sira-rg
 // ---------------------------------------------------------------------------
@@ -19,7 +22,7 @@ module siraResources 'modules/container-apps.bicep' = {
   params: {
     location: location
     environment: environment
-    acrName: 'siracr${uniqueString(resourceGroup().id)}'
+    registry: registry
   }
 }
 
