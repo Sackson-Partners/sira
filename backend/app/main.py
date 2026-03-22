@@ -205,6 +205,18 @@ async def integration_status():
     }
 
 
+# Root endpoint — returns JSON API info (must be registered before SPA catch-all)
+@app.get("/", tags=["Health"], include_in_schema=True)
+async def root():
+        """Root API information endpoint"""
+        return {
+                    "name": settings.APP_NAME,
+                    "version": settings.APP_VERSION,
+                    "description": "Shipping Intelligence & Risk Analytics Platform",
+                    "docs": "/docs",
+                    "health": "/health",
+        }
+    
 # Include API router (must be before SPA catch-all)
 app.include_router(api_router, prefix="/api")
 
