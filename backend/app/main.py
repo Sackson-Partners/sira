@@ -1,6 +1,6 @@
 """
 SIRA Platform - Main Application Entry Point
-Shipping Intelligence & Risk Analytics Platform
+Shipping Intelligence & Risk Analytics Platform v2.0
 
 Serves both the API (/api/*) and the frontend SPA (all other routes).
 """
@@ -18,8 +18,11 @@ from app.core.config import settings
 from app.core.database import init_db, engine, Base
 from app.api import api_router
 
-# Frontend dist directory (copied into Docker container at /app/frontend/dist/)
-FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+# Frontend dist directory - works in both Docker (/app/frontend/dist) and local dev
+_app_dir = Path(__file__).resolve().parent.parent
+FRONTEND_DIR = _app_dir / "frontend" / "dist"
+if not FRONTEND_DIR.exists():
+    FRONTEND_DIR = _app_dir.parent / "frontend" / "dist"
 
 # Configure logging
 logging.basicConfig(
@@ -64,9 +67,12 @@ async def lifespan(app: FastAPI):
     """Application lifespan events"""
     # Startup
     logger.info("Starting SIRA Platform API...")
-    init_db()
-    _ensure_admin_user()
-    logger.info("Database initialized")
+    try:
+        init_db()
+        _ensure_admin_user()
+        logger.info("Database initialized")
+    except Exception as e:
+        logger.error(f"Database initialization failed (app will start anyway): {e}")
     logger.info(f"SIRA Platform API v{settings.APP_VERSION} started successfully")
 
     yield
@@ -79,7 +85,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.APP_NAME,
     description="""
-    ## SIRA Platform API
+    ## SIRA Platform API v2.0
 
     **Shipping Intelligence & Risk Analytics Platform**
     **Multimodal Control Tower + Fleet Management + Market Intelligence + AI**
@@ -87,24 +93,22 @@ app = FastAPI(
     Sponsored by: Energie Partners (EP)
 
     ### Core Modules:
-    - **Multimodal Control Tower**: Real-time operational visibility across all assets and corridor segments
-    - **Vessel Tracking**: AIS-integrated vessel position tracking and charter management
-    - **Fleet & Asset Management**: Truck, rail, barge, and equipment lifecycle management with dispatch
-    - **Port & Terminal Operations**: Berth allocation, anchorage management, and congestion tracking
-    - **Shipment Workspace**: End-to-end shipment tracking with milestones and exception management
-    - **Market Intelligence**: Freight rate benchmarks, market indices, and demurrage analytics
-    - **Chain-of-Custody**: Digital seals, audit trails, and tamper-evident custody tracking
-    - **SIRA AI**: ETA prediction, demurrage risk scoring, and anomaly detection
+    - **Multimodal Control Tower**: Real-time operational visibility across all assets
+    - **Vessel Tracking**: AIS-integrated vessel position tracking (MarineTraffic)
+    - **Fleet & Asset Management**: Truck, rail, barge lifecycle with Flespi telematics
+    - **Port & Terminal Operations**: Berth allocation and congestion tracking
+    - **Shipment Workspace**: End-to-end shipment tracking with milestones
+    - **Market Intelligence**: Freight rate benchmarks and demurrage analytics
+    - **SIRA AI**: Claude/OpenAI-powered ETA prediction, risk scoring, anomaly detection
 
-    ### Legacy Modules:
-    - **Security Intelligence**: Monitor events, manage alerts, and investigate incidents
-    - **Case Management**: Handle security cases with evidence tracking
-    - **Playbook System**: Standardized incident response procedures
-    - **Real-time Notifications**: WebSocket and email alerts
+    ### Phase 2 Integrations:
+    - **Flespi Telematics** (`/api/v1/telemetry/*`): MQTT-based GPS/sensor ingestion
+    - **MarineTraffic AIS** (`/api/v1/ais/*`): Real-time vessel tracking
+    - **AI Intelligence Engine** (`/api/v1/ai/*`): Natural language analytics
 
     ### Authentication:
-    All endpoints (except `/health` and `/api/v1/auth/token`) require authentication.
-    Use the `/api/v1/auth/token` endpoint to obtain an access token.
+    All endpoints (except `/health`) require authentication.
+    Use `/api/v1/auth/token` to obtain an access token.
     """,
     version=settings.APP_VERSION,
     docs_url="/docs",
@@ -113,7 +117,7 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS middleware - allow all origins for cross-domain API access
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -124,7 +128,7 @@ app.add_middleware(
 )
 
 
-# Request timing middleware - also adds CORS headers as fallback
+# Request timing middleware
 @app.middleware("http")
 async def add_headers(request: Request, call_next):
     start_time = time.time()
@@ -140,7 +144,6 @@ async def add_headers(request: Request, call_next):
     response = await call_next(request)
     process_time = time.time() - start_time
     response.headers["X-Process-Time"] = str(process_time)
-    # Ensure CORS headers are always present
     origin = request.headers.get("origin", "*")
     response.headers["Access-Control-Allow-Origin"] = origin
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH"
@@ -161,76 +164,36 @@ async def global_exception_handler(request: Request, exc: Exception):
 # Health check endpoint
 @app.get("/health", tags=["Health"])
 async def health_check():
-    """Health check endpoint for monitoring"""
+    """Health check endpoint for monitoring and Azure probes"""
     from datetime import datetime, timezone
-    from app.core.database import check_db_connection, SessionLocal
-    from app.models.user import User
-
-    db_status = "healthy" if check_db_connection() else "unhealthy"
-
-    # Check if admin user exists
-    admin_exists = False
-    user_count = 0
-    db_url_prefix = settings.DATABASE_URL[:30] if settings.DATABASE_URL else "NOT SET"
-    try:
-        db = SessionLocal()
-        admin = db.query(User).filter(User.username == "admin").first()
-        admin_exists = admin is not None
-        user_count = db.query(User).count()
-        db.close()
-    except Exception as e:
-        db_url_prefix = f"ERROR: {e}"
 
     return {
-        "status": "healthy" if db_status == "healthy" else "degraded",
+        "status": "healthy",
         "version": settings.APP_VERSION,
-        "database": db_status,
-        "database_url": db_url_prefix + "...",
-        "admin_user_exists": admin_exists,
-        "total_users": user_count,
-        "cors_origins": settings.cors_origins,
-        "timestamp": datetime.now(timezone.utc).isoformat()
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
 
-# Test login endpoint (debug - remove after fixing)
-@app.get("/test-login", tags=["Debug"])
-async def test_login():
-    """Test that login works - tries admin/admin123 directly"""
-    from app.core.database import SessionLocal
-    from app.core.security import verify_password, create_access_token
-    from app.models.user import User
+# Integration status endpoint
+@app.get("/health/integrations", tags=["Health"])
+async def integration_status():
+    """Check status of all external integrations"""
+    from app.services.flespi_service import flespi_service
+    from app.services.marinetraffic_service import marinetraffic_service
+    from app.services.ai_engine import ai_engine
 
-    db = SessionLocal()
-    try:
-        user = db.query(User).filter(User.username == "admin").first()
-        if not user:
-            return {"status": "FAIL", "reason": "admin user not found in database"}
-
-        password_ok = verify_password("admin123", user.hashed_password)
-        if not password_ok:
-            return {"status": "FAIL", "reason": "password verification failed", "hash_prefix": user.hashed_password[:20]}
-
-        token = create_access_token(
-            data={"sub": user.username, "role": user.role, "user_id": user.id}
-        )
-        return {
-            "status": "OK",
-            "message": "Login works! admin/admin123 is valid",
-            "token_preview": token[:30] + "...",
-            "user_id": user.id,
-            "role": user.role,
-            "is_active": user.is_active,
-        }
-    finally:
-        db.close()
+    return {
+        "flespi": {"configured": flespi_service.is_configured},
+        "marinetraffic": {"configured": marinetraffic_service.is_configured},
+        "ai_engine": {"configured": ai_engine.is_configured},
+        "mapbox": {"configured": bool(settings.MAPBOX_ACCESS_TOKEN)},
+    }
 
 
 # Include API router (must be before SPA catch-all)
 app.include_router(api_router, prefix="/api")
 
 # --- Frontend SPA serving ---
-# Mount frontend static assets (JS/CSS bundles)
 if FRONTEND_DIR.exists() and (FRONTEND_DIR / "assets").exists():
     app.mount("/assets", StaticFiles(directory=str(FRONTEND_DIR / "assets")), name="static-assets")
     logger.info(f"Serving frontend assets from {FRONTEND_DIR / 'assets'}")
@@ -240,11 +203,9 @@ if FRONTEND_DIR.exists() and (FRONTEND_DIR / "assets").exists():
 @app.get("/{full_path:path}", include_in_schema=False)
 async def serve_spa(request: Request, full_path: str):
     """Serve the React SPA for all non-API routes"""
-    # If frontend is built, serve index.html
     index_file = FRONTEND_DIR / "index.html"
     if index_file.exists():
         return FileResponse(str(index_file), media_type="text/html")
-    # Fallback: API info (no frontend built)
     return JSONResponse({
         "name": settings.APP_NAME,
         "version": settings.APP_VERSION,

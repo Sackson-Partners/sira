@@ -1,5 +1,5 @@
 """
-API v1 Routes
+API v1 Routes - SIRA Platform Phase 2
 """
 
 from fastapi import APIRouter
@@ -7,11 +7,12 @@ from app.api.v1 import (
     auth, users, movements, events, alerts, cases, playbooks,
     evidences, notifications, reports, websocket,
     vessels, ports, fleet, corridors, shipments, market, control_tower,
+    telemetry, ais, intelligence,
 )
 
 api_router = APIRouter()
 
-# Original routes
+# Core routes
 api_router.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 api_router.include_router(users.router, prefix="/users", tags=["Users"])
 api_router.include_router(movements.router, prefix="/movements", tags=["Movements"])
@@ -32,3 +33,8 @@ api_router.include_router(fleet.router, prefix="/fleet", tags=["Fleet & Assets"]
 api_router.include_router(corridors.router, prefix="/corridors", tags=["Corridors"])
 api_router.include_router(shipments.router, prefix="/shipments", tags=["Shipments"])
 api_router.include_router(market.router, prefix="/market", tags=["Market Intelligence"])
+
+# Phase 2: External Integrations
+api_router.include_router(telemetry.router, prefix="/telemetry", tags=["Telemetry (Flespi)"])
+api_router.include_router(ais.router, prefix="/ais", tags=["AIS (MarineTraffic)"])
+api_router.include_router(intelligence.router, prefix="/ai", tags=["AI Intelligence"])

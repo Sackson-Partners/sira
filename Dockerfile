@@ -15,6 +15,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     libpq-dev \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy backend requirements and install
@@ -26,16 +27,18 @@ RUN pip install --no-cache-dir --upgrade pip && \
 COPY backend/ .
 
 # Copy built frontend from stage 1
-# FastAPI serves both API (/api/*) and frontend SPA (all other routes)
 COPY --from=frontend-build /frontend/dist /app/frontend/dist
 
-# Default env vars (overridden by Railway environment variables)
+# Default env vars (overridden by Azure/Railway environment variables)
 ENV ALLOWED_ORIGINS=*
 ENV DEBUG=False
-
-# Railway uses PORT env var (default 8080)
 ENV PORT=8080
+
 EXPOSE ${PORT}
 
-# Start server - admin user is created in FastAPI lifespan
-CMD ["/bin/sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}"]
+# Health check for Azure Container Apps
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:${PORT}/health || exit 1
+
+# Start server
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}"]
