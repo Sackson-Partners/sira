@@ -20,6 +20,36 @@ import logging
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+# MIME types that are images and should be preprocessed before storage / AI use.
+_IMAGE_MIME_TYPES = {
+    "image/jpeg", "image/jpg", "image/png", "image/gif",
+    "image/webp", "image/bmp", "image/tiff",
+}
+
+
+def _preprocess_image_content(content: bytes, filename: str) -> bytes:
+    """
+    Resize and compress image bytes so max(w, h) <= 1568px (Claude API safe limit).
+
+    Returns the processed JPEG bytes, or the original bytes if the file is not
+    a recognised image or preprocessing fails gracefully.
+    """
+    try:
+        from services.ai.image_utils import encode_image_bytes_for_claude
+        b64, _ = encode_image_bytes_for_claude(
+            content,
+            source_label=filename,
+        )
+        import base64
+        return base64.b64decode(b64)
+    except Exception as exc:
+        logger.warning(
+            "Image preprocessing skipped for '%s' — %s. "
+            "Original bytes will be stored.",
+            filename, exc,
+        )
+        return content
+
 
 @router.get("/case/{case_id}", response_model=List[EvidenceResponse])
 async def list_case_evidences(
@@ -97,6 +127,7 @@ async def upload_evidence(
 ):
     """Upload evidence file"""
     from app.core.config import settings
+    from pathlib import Path
     import os
 
     case = db.query(Case).filter(Case.id == case_id).first()
@@ -117,16 +148,32 @@ async def upload_evidence(
             detail=f"File too large. Maximum size is {settings.MAX_FILE_SIZE / 1024 / 1024}MB"
         )
 
-    # Compute hash
+    # Preprocess image files: resize to <= 1568px and convert to JPEG so that
+    # any subsequent Claude API call never hits the 2000px dimension error.
+    is_image = (file.content_type or "").lower() in _IMAGE_MIME_TYPES
+    if is_image:
+        original_size = len(content)
+        content = _preprocess_image_content(content, file.filename or "upload")
+        logger.info(
+            "Evidence image preprocessed: '%s' %d bytes -> %d bytes (case %d)",
+            file.filename, original_size, len(content), case_id,
+        )
+
+    # Compute hash on the (possibly preprocessed) content
     file_hash = hashlib.sha256(content).hexdigest()
 
     # Save file
     upload_dir = os.path.join(settings.UPLOAD_DIR, f"case_{case_id}")
     os.makedirs(upload_dir, exist_ok=True)
 
-    # Generate unique filename
+    # Generate unique filename; normalise to .jpg for preprocessed images
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    safe_filename = f"{timestamp}_{file.filename}"
+    original_name = file.filename or "upload"
+    if is_image:
+        stem = Path(original_name).stem
+        safe_filename = f"{timestamp}_{stem}.jpg"
+    else:
+        safe_filename = f"{timestamp}_{original_name}"
     file_path = os.path.join(upload_dir, safe_filename)
 
     with open(file_path, "wb") as f:
@@ -138,12 +185,12 @@ async def upload_evidence(
         evidence_type=evidence_type,
         file_ref=file_path,
         original_filename=file.filename,
-        file_size=file_size,
-        mime_type=file.content_type,
+        file_size=len(content),
+        mime_type="image/jpeg" if is_image else file.content_type,
         file_hash=file_hash,
         notes=notes,
         uploaded_by=current_user.id,
-        metadata=json.dumps({
+        evidence_metadata=json.dumps({
             "uploader": current_user.username,
             "upload_time": datetime.now(timezone.utc).isoformat()
         })

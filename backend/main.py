@@ -161,17 +161,20 @@ class Playbook(Base):
 
 class Evidence(Base):
     __tablename__ = "evidences"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     case_id = Column(Integer, ForeignKey("cases.id", ondelete="CASCADE"), nullable=False)
     evidence_type = Column(String(50), nullable=False)  # IoT/photo/video/document/etc.
     file_ref = Column(String(500))  # S3 path or local reference
-    metadata = Column(Text)  # JSON: uploader, timestamp, location
+    # NOTE: "metadata" is reserved by SQLAlchemy's Declarative API.
+    # The Python attribute is evidence_metadata; the DB column name stays "metadata"
+    # so no schema migration is required.
+    evidence_metadata = Column("metadata", Text)  # JSON: uploader, timestamp, location
     verification_status = Column(String(50), default="pending")
     file_hash = Column(String(64))  # SHA-256 for integrity
     uploaded_by = Column(Integer, ForeignKey("users.id"))
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    
+
     case = relationship("Case", back_populates="evidences")
 
 
@@ -328,7 +331,8 @@ class EvidenceCreate(BaseModel):
     case_id: int = Field(..., gt=0)
     evidence_type: str = Field(..., max_length=50)
     file_ref: str = Field(..., max_length=500)
-    metadata: Optional[str] = None
+    # "metadata" is reserved by Pydantic v2 as well; use evidence_metadata.
+    evidence_metadata: Optional[str] = None
 
 
 class EvidenceResponse(BaseModel):
@@ -848,6 +852,8 @@ def upload_evidence(
     # Compute hash for integrity
     evidence_hash = hashlib.sha256(evidence.file_ref.encode()).hexdigest()
     
+    # evidence.model_dump() now yields {"evidence_metadata": ...} which maps
+    # correctly to the renamed Evidence.evidence_metadata attribute.
     db_evidence = Evidence(
         **evidence.model_dump(),
         file_hash=evidence_hash,
