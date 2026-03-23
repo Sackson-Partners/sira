@@ -190,7 +190,7 @@ async def upload_evidence(
         file_hash=file_hash,
         notes=notes,
         uploaded_by=current_user.id,
-        metadata=json.dumps({
+        evidence_metadata=json.dumps({
             "uploader": current_user.username,
             "upload_time": datetime.now(timezone.utc).isoformat()
         })
