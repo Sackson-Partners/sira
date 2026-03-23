@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from app.main import app
 from app.core.database import Base, get_db
@@ -14,12 +15,14 @@ from app.models.user import User
 from app.models.organization import Organization
 from app.models.shipment import Shipment
 
-# Test DB — in-memory SQLite
-SQLALCHEMY_DATABASE_URL = "sqlite:///./test_sync.db"
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
+# Test DB — in-memory SQLite with StaticPool so all connections share the same data
+SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
+engine = create_engine(
+    SQLALCHEMY_DATABASE_URL,
+    connect_args={"check_same_thread": False},
+    poolclass=StaticPool,
+)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-Base.metadata.create_all(bind=engine)
 
 
 def override_get_db():
@@ -30,13 +33,21 @@ def override_get_db():
         db.close()
 
 
+# Set the override at module level so all requests use the test DB
 app.dependency_overrides[get_db] = override_get_db
+
+# Create tables once
+Base.metadata.create_all(bind=engine)
+
 client = TestClient(app)
 
 
 @pytest.fixture(autouse=True)
 def setup_test_data():
-    """Seed minimal test data before each test."""
+    """Seed minimal test data before each test and clean up after."""
+    # Ensure override is active (may have been cleared by conftest)
+    app.dependency_overrides[get_db] = override_get_db
+
     db = TestingSessionLocal()
     try:
         # Organization
@@ -63,7 +74,7 @@ def setup_test_data():
         )
         db.merge(user)
 
-        # Shipment
+        # Shipment — use actual model fields
         shipment = Shipment(
             id=1,
             shipment_ref="TEST-001",
@@ -85,8 +96,9 @@ def setup_test_data():
     # Cleanup
     db = TestingSessionLocal()
     try:
-        db.execute("DELETE FROM checkpoints WHERE shipment_id = 1")
-        db.execute("DELETE FROM sync_logs")
+        from sqlalchemy import text
+        db.execute(text("DELETE FROM checkpoints WHERE shipment_id = 1"))
+        db.execute(text("DELETE FROM sync_logs"))
         db.commit()
     except Exception:
         pass
