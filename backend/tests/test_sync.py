@@ -2,6 +2,7 @@
 Tests for the offline batch sync endpoint.
 """
 import pytest
+from datetime import datetime, timezone
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -65,10 +66,13 @@ def setup_test_data():
         # Shipment
         shipment = Shipment(
             id=1,
-            reference="TEST-001",
+            shipment_ref="TEST-001",
             status="in_transit",
             cargo_type="general",
-            created_by=1,
+            origin="Test Origin",
+            destination="Test Destination",
+            laycan_start=datetime(2026, 3, 23, tzinfo=timezone.utc),
+            laycan_end=datetime(2026, 3, 30, tzinfo=timezone.utc),
         )
         db.merge(shipment)
 
