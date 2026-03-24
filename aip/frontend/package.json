@@ -1,0 +1,38 @@
+{
+  "name": "aip-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.22.0",
+    "axios": "^1.6.5",
+    "zustand": "^4.5.0",
+    "@tanstack/react-query": "^5.17.0",
+    "react-hook-form": "^7.49.0",
+    "react-hot-toast": "^2.4.1",
+    "@heroicons/react": "^2.1.1",
+    "@headlessui/react": "^1.7.18",
+    "recharts": "^2.10.0",
+    "date-fns": "^3.3.0",
+    "clsx": "^2.1.0",
+    "@msal/browser": "^3.6.0",
+    "@msal/react": "^2.0.14"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.55",
+    "@types/react-dom": "^18.2.19",
+    "@vitejs/plugin-react": "^4.2.1",
+    "typescript": "^5.2.2",
+    "vite": "^5.1.0",
+    "tailwindcss": "^3.4.1",
+    "postcss": "^8.4.35",
+    "autoprefixer": "^10.4.17"
+  }
+}
