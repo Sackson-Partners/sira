@@ -154,6 +154,7 @@ jobs:
           resourceGroupName: ${{ env.AZURE_RESOURCE_GROUP }}
           region: ${{ env.AZURE_LOCATION }}
           template: infra/azure/main.bicep
+          deploymentName: sira-${{ github.run_number }}-${{ github.run_attempt }}
           # Secrets are passed from GitHub Actions environment secrets — never hardcoded
           parameters: >
             location=${{ env.AZURE_LOCATION }}
