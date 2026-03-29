@@ -2,7 +2,7 @@
 Report Generation Routes
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Response
+from fastapi import APIRouter, Depends, Response
 from sqlalchemy.orm import Session
 from typing import Optional
 from datetime import datetime, timezone, timedelta
@@ -121,10 +121,10 @@ async def get_dashboard_data(
     cases_today = db.query(Case).filter(Case.created_at >= today_start).count()
 
     # SLA stats
-    sla_breached = db.query(Alert).filter(Alert.sla_breached == True).count()
+    sla_breached = db.query(Alert).filter(Alert.sla_breached == True).count()  # noqa: E712
     sla_at_risk = db.query(Alert).filter(
         Alert.status.in_(["open", "acknowledged"]),
-        Alert.sla_breached == False
+        Alert.sla_breached == False  # noqa: E712
     ).count()
 
     # Recent alerts

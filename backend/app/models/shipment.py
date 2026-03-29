@@ -2,7 +2,7 @@
 Shipment Model - End-to-end multimodal shipment tracking with chain-of-custody
 """
 
-from sqlalchemy import Column, Integer, String, Text, DateTime, Float, Boolean, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, DateTime, Float, ForeignKey
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 

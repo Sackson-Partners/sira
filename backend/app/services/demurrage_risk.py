@@ -6,7 +6,7 @@ Phase 1: Rule-based scoring
 Phase 2+: ML-powered with historical training data
 """
 
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional, Dict, Any
 import logging
 

@@ -6,7 +6,6 @@ from fastapi import APIRouter, Depends, HTTPException, status, Response
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime, timezone
-import json
 
 from app.core.database import get_db
 from app.core.security import get_current_user, require_role

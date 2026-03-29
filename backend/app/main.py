@@ -19,7 +19,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from app.core.config import settings
-from app.core.database import init_db, engine, Base
+from app.core.database import init_db
 from app.core.limiter import limiter
 from app.api import api_router
 
@@ -297,14 +297,14 @@ async def integration_status():
 # Root endpoint — returns JSON API info (must be registered before SPA catch-all)
 @app.get("/", tags=["Health"], include_in_schema=True)
 async def root():
-        """Root API information endpoint"""
-        return {
-                    "name": settings.APP_NAME,
-                    "version": settings.APP_VERSION,
-                    "description": "Shipping Intelligence & Risk Analytics Platform",
-                    "docs": "/docs",
-                    "health": "/health",
-        }
+    """Root API information endpoint"""
+    return {
+        "name": settings.APP_NAME,
+        "version": settings.APP_VERSION,
+        "description": "Shipping Intelligence & Risk Analytics Platform",
+        "docs": "/docs",
+        "health": "/health",
+    }
 
 # Include API router (must be before SPA catch-all)
 app.include_router(api_router, prefix="/api")
@@ -336,7 +336,7 @@ if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
         "app.main:app",
-        host="0.0.0.0",
+        host="0.0.0.0",  # nosec B104
         port=8000,
         reload=settings.DEBUG,
         log_level=settings.LOG_LEVEL.lower()

@@ -5,8 +5,7 @@ Phase 2: Full fleet management endpoints (vehicles, drivers, trips, alerts, GeoJ
 
 from __future__ import annotations
 
-import uuid
-from typing import List, Optional
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
@@ -15,7 +14,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import TokenUser, get_current_user, require_fleet_manager
 from app.core.database import get_db
 from app.models.telemetry import (
-    Alert, Driver, MaintenancePrediction, MaintenanceRecord,
+    Alert, MaintenancePrediction,
     Trip, Vehicle,
 )
 
@@ -165,7 +164,7 @@ async def get_fleet_geojson(
 ):
     """Return GeoJSON FeatureCollection of all active vehicle positions."""
     from app.models.telemetry import TelemetryEvent
-    from sqlalchemy import desc, func as sqlfunc
+    from sqlalchemy import desc
 
     # Get latest telemetry per device
     vehicles = db.query(Vehicle).filter(Vehicle.status.in_(["in_trip", "available"])).all()
@@ -332,7 +331,7 @@ async def maintenance_due(
     """Return AI maintenance predictions that are not resolved."""
     predictions = (
         db.query(MaintenancePrediction)
-        .filter(MaintenancePrediction.resolved == False)
+        .filter(MaintenancePrediction.resolved == False)  # noqa: E712
         .order_by(MaintenancePrediction.days_to_failure)
         .limit(50)
         .all()

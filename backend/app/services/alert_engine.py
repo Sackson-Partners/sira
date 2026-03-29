@@ -3,7 +3,6 @@ Automated Alert Derivation Engine
 Rule-based system for generating alerts from events
 """
 
-import json
 import logging
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone, timedelta
@@ -299,7 +298,7 @@ class AlertDerivationEngine:
         # Find open alerts that might have breached SLA
         open_alerts = self.db.query(Alert).filter(
             Alert.status.in_(["open", "acknowledged"]),
-            Alert.sla_breached == False,
+            Alert.sla_breached == False,  # noqa: E712
             Alert.sla_timer.isnot(None)
         ).all()
 

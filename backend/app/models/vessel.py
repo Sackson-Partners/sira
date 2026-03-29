@@ -2,7 +2,7 @@
 Vessel Model - Ship/vessel tracking and management
 """
 
-from sqlalchemy import Column, Integer, String, Text, DateTime, Float, Boolean, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, Float
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 

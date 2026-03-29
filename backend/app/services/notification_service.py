@@ -132,13 +132,13 @@ class NotificationService:
         if target_user_ids:
             users = self.db.query(User).filter(
                 User.id.in_(target_user_ids),
-                User.is_active == True
+                User.is_active == True  # noqa: E712
             ).all()
         else:
             # Get all security personnel
             users = self.db.query(User).filter(
                 User.role.in_(["security_lead", "supervisor", "admin"]),
-                User.is_active == True
+                User.is_active == True  # noqa: E712
             ).all()
 
         for user in users:
@@ -196,12 +196,12 @@ class NotificationService:
         if target_user_ids:
             users = self.db.query(User).filter(
                 User.id.in_(target_user_ids),
-                User.is_active == True
+                User.is_active == True  # noqa: E712
             ).all()
         else:
             users = self.db.query(User).filter(
                 User.role.in_(["security_lead", "supervisor", "admin"]),
-                User.is_active == True
+                User.is_active == True  # noqa: E712
             ).all()
 
         for user in users:
@@ -252,7 +252,7 @@ class NotificationService:
         # Get supervisors and admins
         users = self.db.query(User).filter(
             User.role.in_(["supervisor", "admin"]),
-            User.is_active == True
+            User.is_active == True  # noqa: E712
         ).all()
 
         for user in users:
@@ -297,7 +297,7 @@ class NotificationService:
         """Mark all notifications as read for a user"""
         result = self.db.query(Notification).filter(
             Notification.user_id == user_id,
-            Notification.is_read == False
+            Notification.is_read == False  # noqa: E712
         ).update({
             "is_read": True,
             "read_at": datetime.now(timezone.utc)
@@ -318,7 +318,7 @@ class NotificationService:
         )
 
         if unread_only:
-            query = query.filter(Notification.is_read == False)
+            query = query.filter(Notification.is_read == False)  # noqa: E712
 
         return query.order_by(
             Notification.created_at.desc()
@@ -328,5 +328,5 @@ class NotificationService:
         """Get count of unread notifications"""
         return self.db.query(Notification).filter(
             Notification.user_id == user_id,
-            Notification.is_read == False
+            Notification.is_read == False  # noqa: E712
         ).count()

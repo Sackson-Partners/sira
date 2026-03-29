@@ -15,11 +15,13 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 bearer_scheme = HTTPBearer(auto_error=False)
 
+
 class TokenUser(BaseModel):
     sub: str
     email: Optional[str] = None
     role: str = "operator"
     org_id: Optional[str] = None
+
 
 async def get_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
@@ -48,12 +50,14 @@ async def get_current_user(
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate credentials")
 
+
 def require_role(*roles: str):
     async def checker(user: TokenUser = Depends(get_current_user)) -> TokenUser:
         if user.role not in roles:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Role '{user.role}' not permitted")
         return user
     return checker
+
 
 require_admin = require_role("super_admin", "org_admin")
 require_fleet_manager = require_role("super_admin", "org_admin", "fleet_manager")

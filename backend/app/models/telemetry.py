@@ -7,12 +7,10 @@ fleet assets, maintenance, and AI insights.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
-from typing import Optional
 
 from sqlalchemy import (
     Boolean, Column, DateTime, Float, ForeignKey,
-    Integer, String, Text, UniqueConstraint,
+    Integer, String, Text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship

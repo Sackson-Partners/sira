@@ -57,7 +57,7 @@ async def get_alert_stats(
     open_alerts = db.query(Alert).filter(Alert.status == "open").count()
     critical = db.query(Alert).filter(Alert.severity == "Critical").count()
     high = db.query(Alert).filter(Alert.severity == "High").count()
-    sla_breached = db.query(Alert).filter(Alert.sla_breached == True).count()
+    sla_breached = db.query(Alert).filter(Alert.sla_breached == True).count()  # noqa: E712
 
     return {
         "total": total,

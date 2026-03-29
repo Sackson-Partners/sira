@@ -11,7 +11,7 @@ from email.mime.base import MIMEBase
 from email import encoders
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone
-from pathlib import Path
+
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 

@@ -3,7 +3,7 @@ Vehicle Model — Trucks, tankers, and other land/multi-modal transport assets
 Distinct from the existing Asset model (which covers maritime/rail assets).
 """
 
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Float, ForeignKey, JSON
+from sqlalchemy import Column, Integer, String, DateTime, Float, ForeignKey, JSON
 from datetime import datetime, timezone
 
 from app.core.database import Base

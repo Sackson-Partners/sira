@@ -2,7 +2,7 @@
 Database Configuration and Session Management
 """
 
-from sqlalchemy import create_engine, event, text
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, Session, declarative_base
 from sqlalchemy.pool import QueuePool, StaticPool
 from contextlib import contextmanager

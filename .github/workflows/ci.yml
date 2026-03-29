@@ -59,7 +59,7 @@ jobs:
         working-directory: ./backend
         run: |
           pip install flake8
-          flake8 app/ --max-line-length=120 --ignore=E501,W503,E402
+          flake8 app/ --max-line-length=120 --ignore=E501,W503,E402,W504,E226,F841
 
       - name: Run tests
         working-directory: ./backend

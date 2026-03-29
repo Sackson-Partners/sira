@@ -6,7 +6,7 @@ digital signatures, optional blockchain notarization, and verification.
 """
 
 from datetime import datetime, timezone
-from typing import Optional, List, Dict, Any
+from typing import List, Dict, Any
 import hashlib
 import json
 import logging

@@ -5,9 +5,8 @@ Handles MQTT ingestion of GPS/telematics data from Flespi platform.
 
 import json
 import logging
-import asyncio
 from datetime import datetime, timezone
-from typing import Optional, Dict, Any, List
+from typing import Dict, Any, List
 
 import httpx
 

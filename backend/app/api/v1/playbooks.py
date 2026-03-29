@@ -134,7 +134,7 @@ async def search_playbooks(
 ):
     """Search for playbooks by incident type"""
     query = db.query(Playbook).filter(
-        Playbook.is_active == True,
+        Playbook.is_active == True,  # noqa: E712
         Playbook.incident_type.ilike(f"%{incident_type}%")
     )
 
