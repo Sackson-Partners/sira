@@ -40,4 +40,11 @@ EXPOSE ${PORT}
 # Start server with debug output
 COPY backend/start.sh /app/start.sh
 RUN chmod +x /app/start.sh
+
+# Run as non-root user
+RUN addgroup --system --gid 1001 sira && \
+    adduser --system --uid 1001 --gid 1001 --no-create-home sira && \
+    chown -R sira:sira /app
+USER sira
+
 CMD ["/bin/sh", "/app/start.sh"]

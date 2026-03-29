@@ -2,7 +2,6 @@
   "buildCommand": "cd frontend && npm install && npm run build",
   "outputDirectory": "frontend/dist",
   "installCommand": "echo 'Using buildCommand for install'",
-  "framework": "vite",
   "headers": [
     {
       "source": "/assets/(.*)",
@@ -23,8 +22,18 @@
       ]
     }
   ],
-  "rewrites": [
-    { "source": "/api/:path*", "destination": "https://sira-7oeu.onrender.com/api/:path*" },
-    { "source": "/(.*)", "destination": "/index.html" }
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "https://sira-api-staging.orangedesert-b6177a19.southafricanorth.azurecontainerapps.io/api/$1"
+    },
+    {
+      "src": "/assets/(.*)",
+      "dest": "/assets/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
   ]
 }

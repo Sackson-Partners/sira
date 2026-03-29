@@ -89,3 +89,9 @@ frontend/build/
 # Temporary files
 *.tmp
 *.temp
+
+# Nested project copies (artifacts from accidental git clone inside repo)
+sira/
+backend/sira/
+frontend/sira/
+.vercel

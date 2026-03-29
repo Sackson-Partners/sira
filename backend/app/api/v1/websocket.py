@@ -2,10 +2,12 @@
 WebSocket Routes for Real-time Notifications
 """
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, Query
-from sqlalchemy.orm import Session
+import asyncio
 import json
 import logging
+
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
+from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.security import decode_token
@@ -34,20 +36,38 @@ async def get_user_from_token(token: str, db: Session) -> User:
 @router.websocket("/notifications")
 async def websocket_notifications(
     websocket: WebSocket,
-    token: str = Query(...),
     db: Session = Depends(get_db)
 ):
     """
     WebSocket endpoint for real-time notifications.
-    Connect with: ws://host/api/v1/ws/notifications?token=<jwt_token>
+
+    Authentication flow (token is NOT passed in the URL):
+    1. Connect: ws://host/api/v1/ws/notifications
+    2. Immediately send: {"action": "auth", "token": "<jwt>"}
+    3. Server responds with welcome message or closes with code 4001.
     """
-    # Validate token
+    # Accept the connection so we can receive the auth message
+    await websocket.accept()
+
+    # Step 1: Receive auth token as first message (10-second window)
+    try:
+        raw = await asyncio.wait_for(websocket.receive_text(), timeout=10.0)
+        auth = json.loads(raw)
+        token = auth.get("token", "")
+    except asyncio.TimeoutError:
+        await websocket.close(code=4008, reason="Authentication timeout")
+        return
+    except (json.JSONDecodeError, Exception):
+        await websocket.close(code=4001, reason="Invalid auth message — expected JSON {\"action\":\"auth\",\"token\":\"...\"}")
+        return
+
+    # Step 2: Validate the token
     user = await get_user_from_token(token, db)
     if not user:
         await websocket.close(code=4001, reason="Invalid or expired token")
         return
 
-    # Accept connection
+    # Step 3: Register with the connection manager
     await ws_manager.connect(websocket, user.id)
     logger.info(f"WebSocket connected: user {user.username}")
 

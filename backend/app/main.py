@@ -5,7 +5,8 @@ Shipping Intelligence & Risk Analytics Platform
 Serves both the API (/api/*) and the frontend SPA (all other routes).
 """
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -14,9 +15,16 @@ from pathlib import Path
 import logging
 import time
 
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+
 from app.core.config import settings
 from app.core.database import init_db, engine, Base
+from app.core.limiter import limiter
 from app.api import api_router
+
+# 10 MB request body limit (applies to JSON payloads; file uploads use MAX_FILE_SIZE in config)
+_MAX_REQUEST_BODY = 10 * 1024 * 1024
 
 # Frontend dist directory
 # Docker: /app/app/main.py → parent.parent = /app → /app/frontend/dist
@@ -35,10 +43,28 @@ logger = logging.getLogger(__name__)
 
 
 def _ensure_admin_user():
-    """Create admin user if it doesn't exist (runs on every startup for cloud deploys)"""
+    """Create admin user if it doesn't exist.
+
+    Reads the initial password from the ADMIN_INITIAL_PASSWORD environment variable.
+    Raises RuntimeError and refuses to start in production if the variable is not set.
+    """
+    import os
     from app.core.database import SessionLocal
     from app.core.security import hash_password
     from app.models.user import User
+
+    admin_password = os.getenv("ADMIN_INITIAL_PASSWORD")
+    if not admin_password:
+        if not settings.DEBUG:
+            raise RuntimeError(
+                "ADMIN_INITIAL_PASSWORD environment variable is not set. "
+                "Set a strong, unique password before starting in production."
+            )
+        logger.warning(
+            "ADMIN_INITIAL_PASSWORD not set — using insecure placeholder. "
+            "Set the variable before deploying to production."
+        )
+        admin_password = "changeme-set-ADMIN_INITIAL_PASSWORD"
 
     db = SessionLocal()
     try:
@@ -48,13 +74,13 @@ def _ensure_admin_user():
                 username="admin",
                 email="admin@sira.com",
                 full_name="SIRA Administrator",
-                hashed_password=hash_password("admin123"),
+                hashed_password=hash_password(admin_password),
                 role="admin",
                 is_active=True,
             )
             db.add(admin)
             db.commit()
-            logger.info("Admin user created (admin / admin123)")
+            logger.info("Admin user created successfully")
         else:
             logger.info("Admin user already exists")
     except Exception as e:
@@ -115,16 +141,20 @@ app = FastAPI(
     Use the `/api/v1/auth/token` endpoint to obtain an access token.
     """,
     version=settings.APP_VERSION,
-    docs_url="/docs",
-    redoc_url="/redoc",
-    openapi_url="/openapi.json",
+    docs_url="/docs" if settings.DEBUG else None,
+    redoc_url="/redoc" if settings.DEBUG else None,
+    openapi_url="/openapi.json" if settings.DEBUG else None,
     lifespan=lifespan
 )
 
-# CORS middleware - allow all origins for cross-domain API access
+# Rate limiter
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# CORS middleware — origins controlled by ALLOWED_ORIGINS environment variable
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.cors_origins,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -132,37 +162,92 @@ app.add_middleware(
 )
 
 
-# Request timing middleware - also adds CORS headers as fallback
+# ── Middleware ────────────────────────────────────────────────────────────────
+
 @app.middleware("http")
-async def add_headers(request: Request, call_next):
-    start_time = time.time()
+async def enforce_request_size(request: Request, call_next):
+    """Reject requests whose Content-Length exceeds 10 MB."""
+    content_length = request.headers.get("content-length")
+    if content_length and int(content_length) > _MAX_REQUEST_BODY:
+        return JSONResponse(
+            status_code=413,
+            content={"error": "Request body too large", "code": "REQUEST_TOO_LARGE"},
+        )
+    return await call_next(request)
 
-    # Handle preflight OPTIONS requests
-    if request.method == "OPTIONS":
-        response = JSONResponse(content={}, status_code=200)
-        response.headers["Access-Control-Allow-Origin"] = request.headers.get("origin", "*")
-        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH"
-        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, Accept"
-        return response
 
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    """Attach security headers to every response."""
     response = await call_next(request)
-    process_time = time.time() - start_time
-    response.headers["X-Process-Time"] = str(process_time)
-    # Ensure CORS headers are always present
-    origin = request.headers.get("origin", "*")
-    response.headers["Access-Control-Allow-Origin"] = origin
-    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, Accept"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+    if not settings.DEBUG:
+        response.headers["Strict-Transport-Security"] = (
+            "max-age=31536000; includeSubDomains; preload"
+        )
+    # Tight CSP: API-only origin — no inline scripts, no external resources
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'none'; "
+        "script-src 'self'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data:; "
+        "connect-src 'self'; "
+        "font-src 'self'; "
+        "frame-ancestors 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self'"
+    )
     return response
 
 
-# Exception handler
+@app.middleware("http")
+async def add_process_time_header(request: Request, call_next):
+    """Attach X-Process-Time to every response for performance monitoring."""
+    start = time.time()
+    response = await call_next(request)
+    response.headers["X-Process-Time"] = f"{time.time() - start:.4f}"
+    return response
+
+
+# ── Exception Handlers ────────────────────────────────────────────────────────
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """Structured JSON for all HTTP errors."""
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error": exc.detail, "code": f"HTTP_{exc.status_code}"},
+        headers=getattr(exc, "headers", None),
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Structured JSON for request validation failures.
+    Only expose field-level details in DEBUG mode to avoid leaking schema info.
+    """
+    content: dict = {"error": "Request validation failed", "code": "VALIDATION_ERROR"}
+    if settings.DEBUG:
+        content["details"] = exc.errors()
+    return JSONResponse(status_code=422, content=content)
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    logger.error(f"Unhandled exception: {exc}", exc_info=True)
+    """Catch-all: log the full trace server-side, return opaque 500 to client."""
+    logger.error(
+        "Unhandled exception on %s %s",
+        request.method,
+        request.url.path,
+        exc_info=True,
+    )
     return JSONResponse(
         status_code=500,
-        content={"detail": "Internal server error"}
+        content={"error": "Internal server error", "code": "INTERNAL_ERROR"},
     )
 
 
@@ -186,43 +271,12 @@ async def health_check():
         if not db_ok:
             result["status"] = "degraded"
     except Exception as e:
-        result["database"] = f"error: {e}"
+        result["database"] = "unhealthy"
         result["status"] = "degraded"
+        if settings.DEBUG:
+            result["database_error"] = str(e)
 
     return result
-
-
-# Test login endpoint (debug - remove after fixing)
-@app.get("/test-login", tags=["Debug"])
-async def test_login():
-    """Test that login works - tries admin/admin123 directly"""
-    from app.core.database import SessionLocal
-    from app.core.security import verify_password, create_access_token
-    from app.models.user import User
-
-    db = SessionLocal()
-    try:
-        user = db.query(User).filter(User.username == "admin").first()
-        if not user:
-            return {"status": "FAIL", "reason": "admin user not found in database"}
-
-        password_ok = verify_password("admin123", user.hashed_password)
-        if not password_ok:
-            return {"status": "FAIL", "reason": "password verification failed", "hash_prefix": user.hashed_password[:20]}
-
-        token = create_access_token(
-            data={"sub": user.username, "role": user.role, "user_id": user.id}
-        )
-        return {
-            "status": "OK",
-            "message": "Login works! admin/admin123 is valid",
-            "token_preview": token[:30] + "...",
-            "user_id": user.id,
-            "role": user.role,
-            "is_active": user.is_active,
-        }
-    finally:
-        db.close()
 
 
 # Include API router (must be before SPA catch-all)

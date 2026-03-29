@@ -1,0 +1,226 @@
+name: Deploy to Azure Container Apps (sira-rg)
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options: [staging, prod]
+
+env:
+  AZURE_RESOURCE_GROUP: sira-rg
+  AZURE_LOCATION: southafricanorth
+  DOCKERHUB_USERNAME: sacksons
+  REGISTRY: docker.io/sacksons
+
+jobs:
+  # ── Test Gate: all tests must pass before any build or deploy ──────────────
+  test:
+    name: Test Gate
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: sira_user
+          POSTGRES_PASSWORD: ${{ secrets.CI_DB_PASSWORD }}
+          POSTGRES_DB: sira_test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install backend dependencies
+        working-directory: ./backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run backend tests
+        working-directory: ./backend
+        env:
+          DATABASE_URL: postgresql://sira_user:${{ secrets.CI_DB_PASSWORD }}@localhost:5432/sira_test_db
+          SECRET_KEY: ${{ secrets.CI_SECRET_KEY }}
+        run: |
+          pytest tests/ -v --tb=short --ignore=tests/test_docker.py -q
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install frontend dependencies
+        working-directory: ./frontend
+        run: npm install
+
+      - name: Run frontend tests
+        working-directory: ./frontend
+        run: npm run test:ci
+
+  build-and-push:
+    name: Build & Push Docker Images
+    runs-on: ubuntu-latest
+    needs: test
+    outputs:
+      image-tag: ${{ steps.meta.outputs.version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set image tag
+        id: meta
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          else
+            echo "version=sha-${GITHUB_SHA::8}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push API Gateway image
+        run: |
+          docker build -t ${{ env.REGISTRY }}/sira-api:${{ steps.meta.outputs.version }} -t ${{ env.REGISTRY }}/sira-api:latest -f Dockerfile .
+          docker push ${{ env.REGISTRY }}/sira-api:${{ steps.meta.outputs.version }}
+          docker push ${{ env.REGISTRY }}/sira-api:latest
+
+      - name: Build and push Telematics Worker image
+        run: |
+          docker build -t ${{ env.REGISTRY }}/sira-telematics:${{ steps.meta.outputs.version }} -t ${{ env.REGISTRY }}/sira-telematics:latest -f backend/services/telematics/Dockerfile ./backend
+          docker push ${{ env.REGISTRY }}/sira-telematics:${{ steps.meta.outputs.version }}
+          docker push ${{ env.REGISTRY }}/sira-telematics:latest
+
+      - name: Build and push Maritime Worker image
+        run: |
+          docker build -t ${{ env.REGISTRY }}/sira-maritime:${{ steps.meta.outputs.version }} -t ${{ env.REGISTRY }}/sira-maritime:latest -f backend/services/maritime/Dockerfile ./backend
+          docker push ${{ env.REGISTRY }}/sira-maritime:${{ steps.meta.outputs.version }}
+          docker push ${{ env.REGISTRY }}/sira-maritime:latest
+
+      - name: Build and push AI Worker image
+        run: |
+          docker build -t ${{ env.REGISTRY }}/sira-ai:${{ steps.meta.outputs.version }} -t ${{ env.REGISTRY }}/sira-ai:latest -f backend/services/ai/Dockerfile ./backend
+          docker push ${{ env.REGISTRY }}/sira-ai:${{ steps.meta.outputs.version }}
+          docker push ${{ env.REGISTRY }}/sira-ai:latest
+
+  deploy-infra:
+    name: Deploy Azure Infrastructure (sira-rg)
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    environment: ${{ github.event_name == 'push' && contains(github.ref, 'refs/tags') && 'prod' || 'staging' }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Create Resource Group sira-rg (idempotent)
+        run: |
+          az group create \
+            --name ${{ env.AZURE_RESOURCE_GROUP }} \
+            --location ${{ env.AZURE_LOCATION }} \
+            --tags project=SIRA sponsor=Energie-Partners phase=MVP-Phase-2 \
+            --output none
+
+      - name: Deploy Bicep Infrastructure
+        uses: azure/arm-deploy@v2
+        with:
+          scope: resourcegroup
+          resourceGroupName: ${{ env.AZURE_RESOURCE_GROUP }}
+          region: ${{ env.AZURE_LOCATION }}
+          template: infra/azure/main.bicep
+          # Secrets are passed from GitHub Actions environment secrets — never hardcoded
+          parameters: >
+            location=${{ env.AZURE_LOCATION }}
+            environment=${{ github.event_name == 'push' && contains(github.ref, 'refs/tags') && 'prod' || 'staging' }}
+            secretKey=${{ secrets.SECRET_KEY }}
+            dbAdminPassword=${{ secrets.DB_ADMIN_PASSWORD }}
+            allowedOrigins=${{ secrets.ALLOWED_ORIGINS }}
+          failOnStdErr: false
+
+  deploy-containers:
+    name: Deploy Container Apps
+    runs-on: ubuntu-latest
+    needs: [build-and-push, deploy-infra]
+    steps:
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Determine environment
+        id: env
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            echo "env=prod" >> $GITHUB_OUTPUT
+          else
+            echo "env=staging" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Update API Gateway
+        uses: azure/container-apps-deploy-action@v1
+        with:
+          resourceGroup: ${{ env.AZURE_RESOURCE_GROUP }}
+          containerAppName: sira-api-${{ steps.env.outputs.env }}
+          imageToDeploy: ${{ env.REGISTRY }}/sira-api:${{ needs.build-and-push.outputs.image-tag }}
+
+      - name: Update Telematics Worker
+        uses: azure/container-apps-deploy-action@v1
+        with:
+          resourceGroup: ${{ env.AZURE_RESOURCE_GROUP }}
+          containerAppName: sira-telematics-${{ steps.env.outputs.env }}
+          imageToDeploy: ${{ env.REGISTRY }}/sira-telematics:${{ needs.build-and-push.outputs.image-tag }}
+
+      - name: Update Maritime Worker
+        uses: azure/container-apps-deploy-action@v1
+        with:
+          resourceGroup: ${{ env.AZURE_RESOURCE_GROUP }}
+          containerAppName: sira-maritime-${{ steps.env.outputs.env }}
+          imageToDeploy: ${{ env.REGISTRY }}/sira-maritime:${{ needs.build-and-push.outputs.image-tag }}
+
+      - name: Update AI Worker
+        uses: azure/container-apps-deploy-action@v1
+        with:
+          resourceGroup: ${{ env.AZURE_RESOURCE_GROUP }}
+          containerAppName: sira-ai-worker-${{ steps.env.outputs.env }}
+          imageToDeploy: ${{ env.REGISTRY }}/sira-ai:${{ needs.build-and-push.outputs.image-tag }}
+
+      - name: Smoke test API health
+        continue-on-error: true
+        run: |
+          sleep 30
+          API_FQDN=$(az containerapp show \
+            --name sira-api-${{ steps.env.outputs.env }} \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --query properties.configuration.ingress.fqdn -o tsv)
+          curl -f "https://${API_FQDN}/health" || exit 1
+          echo "Health check passed: https://${API_FQDN}/health"
+
+      - name: Notify deployment success
+        if: success()
+        run: echo "SIRA deployed to ${{ steps.env.outputs.env }} successfully"
