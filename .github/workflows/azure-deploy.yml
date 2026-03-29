@@ -18,6 +18,7 @@ env:
   AZURE_LOCATION: southafricanorth
   DOCKERHUB_USERNAME: sacksons
   REGISTRY: docker.io/sacksons
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 jobs:
   # ── Test Gate: all tests must pass before any build or deploy ──────────────
