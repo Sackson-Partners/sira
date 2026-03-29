@@ -1,6 +1,7 @@
 """
 Application Configuration
 Centralized settings management using Pydantic Settings
+SIRA Platform v2.0 - Phase 2 MVP
 """
 
 from pydantic_settings import BaseSettings
@@ -13,7 +14,7 @@ class Settings(BaseSettings):
 
     # Application
     APP_NAME: str = "SIRA Platform"
-    APP_VERSION: str = "1.0.0"
+    APP_VERSION: str = "2.0.0"
     DEBUG: bool = False
     LOG_LEVEL: str = "INFO"
 
@@ -29,10 +30,12 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
     # CORS
-    ALLOWED_ORIGINS: str = "http://localhost:3000,http://localhost:8080"
+    ALLOWED_ORIGINS: str = "*"
 
     @property
     def cors_origins(self) -> List[str]:
+        if self.ALLOWED_ORIGINS.strip() == "*":
+            return ["*"]
         return [origin.strip() for origin in self.ALLOWED_ORIGINS.split(",")]
 
     # Email (SMTP)
@@ -61,10 +64,31 @@ class Settings(BaseSettings):
     # Redis (for WebSocket and caching)
     REDIS_URL: str = "redis://localhost:6379/0"
 
+    # --- Phase 2: External Integrations ---
+
+    # Flespi Telematics (MQTT)
+    FLESPI_TOKEN: Optional[str] = None
+    FLESPI_MQTT_HOST: str = "mqtt.flespi.io"
+    FLESPI_MQTT_PORT: int = 1883
+    FLESPI_REST_URL: str = "https://flespi.io"
+
+    # MarineTraffic AIS
+    MARINETRAFFIC_API_KEY: Optional[str] = None
+    MARINETRAFFIC_API_URL: str = "https://services.marinetraffic.com/api"
+
+    # AI Intelligence Engine
+    ANTHROPIC_API_KEY: Optional[str] = None
+    OPENAI_API_KEY: Optional[str] = None
+    AI_MODEL: str = "claude-sonnet-4-20250514"
+    AI_MAX_TOKENS: int = 4096
+
+    # Mapbox
+    MAPBOX_ACCESS_TOKEN: Optional[str] = None
+
     class Config:
         env_file = ".env"
         case_sensitive = True
-        extra = "ignore"  # Allow extra fields from URL query params
+        extra = "ignore"
 
 
 @lru_cache()

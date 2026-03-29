@@ -16,10 +16,12 @@ import {
   CubeIcon,
   ChartBarSquareIcon,
   DocumentTextIcon,
+  SparklesIcon,
 } from '@heroicons/react/24/outline'
 import { useAuthStore } from '../stores/authStore'
 import { wsService } from '../services/websocket'
 import { notificationsApi } from '../services/api'
+import AIChat from './AIChat'
 import toast from 'react-hot-toast'
 
 const navigation = [
@@ -47,6 +49,7 @@ interface LayoutProps {
 export default function Layout({ children }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
+  const [aiChatOpen, setAiChatOpen] = useState(false)
   const location = useLocation()
   const { user, logout } = useAuthStore()
 
@@ -264,6 +267,18 @@ export default function Layout({ children }: LayoutProps) {
             <div className="px-4 sm:px-6 lg:px-8">{children}</div>
           </main>
         </div>
+
+        {/* AI Chat Button */}
+        <button
+          onClick={() => setAiChatOpen(!aiChatOpen)}
+          className="fixed bottom-4 right-4 z-40 rounded-full bg-primary-600 p-3 text-white shadow-lg hover:bg-primary-700 transition-colors"
+          title="SIRA AI Assistant"
+        >
+          <SparklesIcon className="h-6 w-6" />
+        </button>
+
+        {/* AI Chat Panel */}
+        <AIChat isOpen={aiChatOpen} onClose={() => setAiChatOpen(false)} />
       </div>
     </>
   )

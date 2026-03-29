@@ -129,6 +129,7 @@ jobs:
     name: Deploy Azure Infrastructure (sira-rg)
     runs-on: ubuntu-latest
     needs: build-and-push
+    continue-on-error: true  # Existing infra may reject Bicep re-deployment (e.g. immutable DB version)
     environment: ${{ github.event_name == 'push' && contains(github.ref, 'refs/tags') && 'prod' || 'staging' }}
     steps:
       - name: Checkout code
@@ -154,6 +155,7 @@ jobs:
           resourceGroupName: ${{ env.AZURE_RESOURCE_GROUP }}
           region: ${{ env.AZURE_LOCATION }}
           template: infra/azure/main.bicep
+          deploymentName: sira-${{ github.run_number }}-${{ github.run_attempt }}
           # Secrets are passed from GitHub Actions environment secrets — never hardcoded
           parameters: >
             location=${{ env.AZURE_LOCATION }}
@@ -167,6 +169,7 @@ jobs:
     name: Deploy Container Apps
     runs-on: ubuntu-latest
     needs: [build-and-push, deploy-infra]
+    if: always() && needs.build-and-push.result == 'success'
     steps:
       - name: Azure Login
         uses: azure/login@v2

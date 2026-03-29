@@ -124,7 +124,7 @@ resource containerAppsEnv 'Microsoft.App/managedEnvironments@2023-05-01' = {
 resource apiGateway 'Microsoft.App/containerApps@2023-05-01' = {
   name: 'sira-api-${environment}'
   location: location
-  dependsOn: [kvSecretsUserRole, kvSecretKey, kvDatabaseUrl]
+  dependsOn: [kvSecretsUserRole]
   identity: {
     type: 'UserAssigned'
     userAssignedIdentities: { '${siraIdentity.id}': {} }
@@ -177,7 +177,7 @@ resource apiGateway 'Microsoft.App/containerApps@2023-05-01' = {
 resource telematicsWorker 'Microsoft.App/containerApps@2023-05-01' = {
   name: 'sira-telematics-${environment}'
   location: location
-  dependsOn: [kvSecretsUserRole, kvSecretKey, kvDatabaseUrl]
+  dependsOn: [kvSecretsUserRole]
   identity: {
     type: 'UserAssigned'
     userAssignedIdentities: { '${siraIdentity.id}': {} }
@@ -214,7 +214,7 @@ resource telematicsWorker 'Microsoft.App/containerApps@2023-05-01' = {
 resource maritimeWorker 'Microsoft.App/containerApps@2023-05-01' = {
   name: 'sira-maritime-${environment}'
   location: location
-  dependsOn: [kvSecretsUserRole, kvSecretKey, kvDatabaseUrl]
+  dependsOn: [kvSecretsUserRole]
   identity: {
     type: 'UserAssigned'
     userAssignedIdentities: { '${siraIdentity.id}': {} }
@@ -251,7 +251,7 @@ resource maritimeWorker 'Microsoft.App/containerApps@2023-05-01' = {
 resource aiWorker 'Microsoft.App/containerApps@2023-05-01' = {
   name: 'sira-ai-worker-${environment}'
   location: location
-  dependsOn: [kvSecretsUserRole, kvSecretKey, kvDatabaseUrl]
+  dependsOn: [kvSecretsUserRole]
   identity: {
     type: 'UserAssigned'
     userAssignedIdentities: { '${siraIdentity.id}': {} }

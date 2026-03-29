@@ -30,12 +30,11 @@ resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2022-12-01' =
     tier: 'Burstable'
   }
   properties: {
-    version: '16'
+    version: '18'
     administratorLogin: adminLogin
     administratorLoginPassword: adminPassword
     storage: {
       storageSizeGB: 32
-      autoGrow: 'Enabled'
     }
     backup: {
       backupRetentionDays: 7
