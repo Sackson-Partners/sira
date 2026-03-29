@@ -4,7 +4,7 @@ Password hashing, JWT token management, and authentication
 """
 
 from datetime import datetime, timedelta, timezone
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import jwt
 from jwt.exceptions import InvalidTokenError
 from passlib.context import CryptContext
@@ -40,6 +40,7 @@ def create_access_token(
     expires_delta: Optional[timedelta] = None
 ) -> str:
     """Create a JWT access token"""
+    from app.core.roles import get_permissions
     to_encode = data.copy()
     if expires_delta:
         expire = datetime.now(timezone.utc) + expires_delta
@@ -47,10 +48,12 @@ def create_access_token(
         expire = datetime.now(timezone.utc) + timedelta(
             minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
         )
+    role = data.get("role", "viewer")
     to_encode.update({
         "exp": expire,
         "iat": datetime.now(timezone.utc),
-        "type": "access"
+        "type": "access",
+        "permissions": get_permissions(role),
     })
     encoded_jwt = jwt.encode(
         to_encode,
@@ -141,14 +144,14 @@ def require_role(allowed_roles: list):
 
 def require_admin():
     """Shortcut for admin-only endpoints"""
-    return require_role(["admin"])
+    return require_role(["admin", "super_admin"])
 
 
 def require_security_lead():
     """Shortcut for security lead or higher"""
-    return require_role(["security_lead", "supervisor", "admin"])
+    return require_role(["security_lead", "supervisor", "admin", "super_admin", "org_admin", "manager"])
 
 
 def require_operator():
     """Shortcut for operator or higher"""
-    return require_role(["operator", "security_lead", "supervisor", "admin"])
+    return require_role(["operator", "security_lead", "supervisor", "admin", "super_admin", "org_admin", "manager", "analyst"])
