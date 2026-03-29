@@ -30,7 +30,7 @@ resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2022-12-01' =
     tier: 'Burstable'
   }
   properties: {
-    version: '16'
+    version: '16'  // NOTE: southafricanorth only supports v18 for new servers; existing server stays at v16
     administratorLogin: adminLogin
     administratorLoginPassword: adminPassword
     storage: {
