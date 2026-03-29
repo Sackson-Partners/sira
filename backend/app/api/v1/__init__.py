@@ -10,6 +10,8 @@ from app.api.v1 import (
     telemetry, ais, intelligence,
     # Phase 3: Field Operations (SIRA PRD v2.0)
     organizations, vehicles, routes, assignments, checkpoints, sync,
+    # Multi-role auth & admin
+    super_admin, health,
 )
 
 api_router = APIRouter()
@@ -48,3 +50,7 @@ api_router.include_router(routes.router, prefix="/routes", tags=["Routes (Truck)
 api_router.include_router(assignments.router, prefix="/assignments", tags=["Assignments"])
 api_router.include_router(checkpoints.router, prefix="/checkpoints", tags=["Checkpoints"])
 api_router.include_router(sync.router, prefix="/sync", tags=["Offline Sync"])
+
+# Multi-role auth & platform admin
+api_router.include_router(super_admin.router, prefix="/super-admin", tags=["Super Admin"])
+api_router.include_router(health.router, prefix="/health", tags=["Health (v1)"])
