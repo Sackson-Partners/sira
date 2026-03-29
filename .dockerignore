@@ -18,7 +18,6 @@ uploads/
 docs/
 .github/
 backend/tests/
-backend/alembic/
 sira/
 backend/sira/
 frontend/sira/

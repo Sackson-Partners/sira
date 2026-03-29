@@ -83,6 +83,33 @@ def _ensure_admin_user():
             logger.info("Admin user created successfully")
         else:
             logger.info("Admin user already exists")
+
+        # Also ensure a super_admin user exists
+        super_admin_password = os.getenv("SUPER_ADMIN_PASSWORD", admin_password)
+        existing_sa = db.query(User).filter(User.username == "superadmin").first()
+        if not existing_sa:
+            super_admin = User(
+                username="superadmin",
+                email="superadmin@sira.system",
+                full_name="SIRA Super Administrator",
+                hashed_password=hash_password(super_admin_password),
+                role="super_admin",
+                is_active=True,
+            )
+            db.add(super_admin)
+            db.commit()
+            logger.info("Super admin user created successfully")
+        elif os.getenv("SUPER_ADMIN_PASSWORD"):
+            # SUPER_ADMIN_PASSWORD explicitly set — always sync it so a password
+            # reset takes effect on the next restart without a DB console.
+            existing_sa.hashed_password = hash_password(super_admin_password)
+            existing_sa.is_locked = False
+            existing_sa.failed_login_attempts = 0
+            existing_sa.must_change_password = True
+            db.commit()
+            logger.info("Super admin password updated from SUPER_ADMIN_PASSWORD env var")
+        else:
+            logger.info("Super admin user already exists")
     except Exception as e:
         logger.error(f"Error ensuring admin user: {e}")
         db.rollback()

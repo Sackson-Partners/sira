@@ -63,3 +63,78 @@ class TestHealth:
         if response.status_code == 200:
             data = response.json() if "application/json" in response.headers.get("content-type", "") else {}
             assert "openapi" not in data, "openapi.json must not return an OpenAPI schema in production"
+
+
+class TestApiV1HealthEndpoints:
+    """Tests for the /api/v1/health/* endpoints (versioned health router)."""
+
+    def test_health_check_returns_200(self, client):
+        resp = client.get("/api/v1/health/")
+        assert resp.status_code == status.HTTP_200_OK
+
+    def test_health_check_has_status_field(self, client):
+        resp = client.get("/api/v1/health/")
+        data = resp.json()
+        assert "status" in data
+
+    def test_health_check_has_timestamp(self, client):
+        resp = client.get("/api/v1/health/")
+        data = resp.json()
+        assert "timestamp" in data
+
+    def test_health_check_has_checks(self, client):
+        resp = client.get("/api/v1/health/")
+        data = resp.json()
+        assert "checks" in data
+        assert "database" in data["checks"]
+
+    def test_health_database_is_healthy(self, client):
+        resp = client.get("/api/v1/health/")
+        data = resp.json()
+        assert data["checks"]["database"]["status"] == "healthy"
+
+    def test_health_status_value_is_valid(self, client):
+        resp = client.get("/api/v1/health/")
+        data = resp.json()
+        assert data["status"] in ("healthy", "degraded")
+
+    def test_health_has_version(self, client):
+        resp = client.get("/api/v1/health/")
+        data = resp.json()
+        assert "version" in data
+
+    def test_health_without_slash_also_works(self, client):
+        """Both /api/v1/health and /api/v1/health/ should respond."""
+        resp = client.get("/api/v1/health")
+        assert resp.status_code == status.HTTP_200_OK
+
+    def test_readiness_probe_returns_200(self, client):
+        resp = client.get("/api/v1/health/ready")
+        assert resp.status_code == status.HTTP_200_OK
+
+    def test_readiness_probe_returns_ready_status(self, client):
+        resp = client.get("/api/v1/health/ready")
+        data = resp.json()
+        assert data.get("status") == "ready"
+
+    def test_liveness_probe_returns_200(self, client):
+        resp = client.get("/api/v1/health/live")
+        assert resp.status_code == status.HTTP_200_OK
+
+    def test_liveness_probe_returns_alive_status(self, client):
+        resp = client.get("/api/v1/health/live")
+        data = resp.json()
+        assert data.get("status") == "alive"
+
+    def test_health_without_auth_is_public(self, client):
+        """Health endpoint must be publicly accessible without a token."""
+        resp = client.get("/api/v1/health/")
+        assert resp.status_code not in (401, 403)
+
+    def test_readiness_without_auth_is_public(self, client):
+        resp = client.get("/api/v1/health/ready")
+        assert resp.status_code not in (401, 403)
+
+    def test_liveness_without_auth_is_public(self, client):
+        resp = client.get("/api/v1/health/live")
+        assert resp.status_code not in (401, 403)
