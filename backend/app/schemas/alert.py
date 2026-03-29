@@ -19,7 +19,7 @@ class AlertBase(BaseModel):
     site_zone: Optional[str] = Field(None, max_length=100)
     movement_id: Optional[int] = None
     event_id: Optional[int] = None
-    description: Optional[str] = None
+    description: Optional[str] = Field(None, max_length=2000)
     rule_id: Optional[str] = Field(None, max_length=100)
     rule_name: Optional[str] = Field(None, max_length=255)
 
