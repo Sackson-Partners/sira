@@ -99,6 +99,15 @@ def _ensure_admin_user():
             db.add(super_admin)
             db.commit()
             logger.info("Super admin user created successfully")
+        elif os.getenv("SUPER_ADMIN_PASSWORD"):
+            # SUPER_ADMIN_PASSWORD explicitly set — always sync it so a password
+            # reset takes effect on the next restart without a DB console.
+            existing_sa.hashed_password = hash_password(super_admin_password)
+            existing_sa.is_locked = False
+            existing_sa.failed_login_attempts = 0
+            existing_sa.must_change_password = True
+            db.commit()
+            logger.info("Super admin password updated from SUPER_ADMIN_PASSWORD env var")
         else:
             logger.info("Super admin user already exists")
     except Exception as e:
