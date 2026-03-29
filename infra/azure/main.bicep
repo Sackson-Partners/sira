@@ -33,9 +33,7 @@ param allowedOrigins string
 module database 'modules/database.bicep' = {
   name: 'sira-database'
   params: {
-    location: location
     environment: environment
-    adminPassword: dbAdminPassword
   }
 }
 
