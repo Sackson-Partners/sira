@@ -148,6 +148,20 @@ jobs:
             --tags project=SIRA sponsor=Energie-Partners phase=MVP-Phase-2 \
             --output none
 
+      - name: Clean up stale failed module deployments
+        run: |
+          # Module deployments (sira-database, sira-container-apps) keep a fixed name.
+          # ARM blocks new runs if a prior failed deployment with that name is still "active".
+          # Delete any failed child deployments so this run can proceed cleanly.
+          for name in sira-database sira-container-apps; do
+            state=$(az deployment group show --name "$name" --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --query "properties.provisioningState" -o tsv 2>/dev/null || echo "NotFound")
+            echo "$name: $state"
+            if [[ "$state" == "Failed" || "$state" == "Canceled" ]]; then
+              az deployment group delete --name "$name" --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --no-wait
+              echo "Deleted stale deployment: $name"
+            fi
+          done
+
       - name: Deploy Bicep Infrastructure
         uses: azure/arm-deploy@v2
         with:
