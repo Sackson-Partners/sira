@@ -1,62 +1,31 @@
 // SIRA Platform - Azure Database for PostgreSQL Flexible Server
-// Provisions a Burstable B1ms instance in the sira-rg resource group.
+// References the existing server (already provisioned in sira-rg) and ensures
+// the application database and firewall rules are present.
 //
-// SECURITY: adminPassword is @secure() and never stored in Bicep outputs.
-// The caller (main.bicep) constructs the DATABASE_URL and passes it directly
-// to the Key Vault via the container-apps module.
-
-@description('Azure region')
-param location string
+// Uses 'existing' for the server to avoid ARM conflicts with immutable
+// properties (version, disk size, tier) that were set at original provision time.
+//
+// SECURITY: adminLogin and adminPassword are never stored in Bicep outputs.
+// The caller (main.bicep) constructs the DATABASE_URL from the FQDN output.
 
 @description('Environment tag')
 param environment string
-
-@description('PostgreSQL admin password. Required — no default.')
-@secure()
-param adminPassword string
 
 var serverName = 'sira-db-${environment}'
 var adminLogin = 'sira_admin'
 var databaseName = 'sira'
 
 // ---------------------------------------------------------------------------
-// PostgreSQL Flexible Server
+// Reference the existing PostgreSQL Flexible Server (do not re-provision)
+// The server was created manually/previously and its immutable properties
+// (version, disk size, SKU tier) cannot be changed via ARM update.
 // ---------------------------------------------------------------------------
-resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2022-12-01' = {
+resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2022-12-01' existing = {
   name: serverName
-  location: location
-  sku: {
-    name: 'Standard_B1ms'
-    tier: 'Burstable'
-  }
-  properties: {
-    version: '18'
-    administratorLogin: adminLogin
-    administratorLoginPassword: adminPassword
-    storage: {
-      storageSizeGB: 32
-    }
-    backup: {
-      backupRetentionDays: 7
-      geoRedundantBackup: 'Disabled'
-    }
-    highAvailability: {
-      mode: 'Disabled'
-    }
-    authConfig: {
-      activeDirectoryAuth: 'Disabled'
-      passwordAuth: 'Enabled'
-    }
-    // Enforce TLS — clients must use sslmode=require
-    maintenanceWindow: {
-      customWindow: 'Disabled'
-    }
-  }
-  tags: { project: 'SIRA', environment: environment }
 }
 
 // ---------------------------------------------------------------------------
-// Application Database
+// Application Database — idempotent: no-op if already exists
 // ---------------------------------------------------------------------------
 resource postgresDatabase 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2022-12-01' = {
   parent: postgresServer
@@ -68,6 +37,7 @@ resource postgresDatabase 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2
 }
 
 // Allow Azure services to connect (IP 0.0.0.0 → 0.0.0.0 is the Azure-services rule)
+// Idempotent: no-op if already exists
 resource postgresFirewall 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules@2022-12-01' = {
   parent: postgresServer
   name: 'AllowAzureServices'
