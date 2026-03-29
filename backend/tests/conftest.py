@@ -13,6 +13,7 @@ import os
 os.environ.setdefault("SECRET_KEY", "sira-test-secret-key-for-tests-only-min-32-chars!")
 os.environ.setdefault("ADMIN_INITIAL_PASSWORD", "TestAdmin@Sira1")
 os.environ.setdefault("DEBUG", "false")  # production-like; docs are hidden
+os.environ.setdefault("ALLOWED_ORIGINS", "https://sira-teal.vercel.app")  # CORS allowlist for tests
 # ─────────────────────────────────────────────────────────────────────────────
 
 import pytest
