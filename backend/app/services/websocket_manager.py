@@ -2,11 +2,10 @@
 WebSocket Manager for Real-time Notifications
 """
 
-import json
 import logging
 from typing import Dict, List, Set, Any, Optional
 from datetime import datetime, timezone
-from fastapi import WebSocket, WebSocketDisconnect
+from fastapi import WebSocket
 import asyncio
 
 logger = logging.getLogger(__name__)

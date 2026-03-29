@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 
 from app.core.database import get_db
-from app.core.security import get_current_user, require_role, hash_password
+from app.core.security import require_role, hash_password
 from app.models.user import User
 from app.schemas.user import UserCreate, UserUpdate, UserResponse
 import logging

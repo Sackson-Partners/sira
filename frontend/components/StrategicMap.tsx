@@ -106,7 +106,7 @@ export default function StrategicMap() {
                         mapRef.current?.remove()
                         mapRef.current = null
                 }
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---------------------------------------------------------------------------
   // Initialise data sources and layers
@@ -403,27 +403,27 @@ export default function StrategicMap() {
           {/* HUD Overlay */}
               <div className="absolute top-4 left-4 flex flex-col gap-2 pointer-events-none">
                       <div className="bg-gray-900/90 backdrop-blur border border-gray-700 rounded-lg px-4 py-3 text-white text-sm">
-                                <p className="text-xs text-gray-400 mb-1">SIRA Strategic Intelligence Map</p>p>
+                                <p className="text-xs text-gray-400 mb-1">SIRA Strategic Intelligence Map</p>
                                 <div className="flex gap-4">
                                             <span className="flex items-center gap-1.5">
                                                           <span className="w-2.5 h-2.5 rounded-full bg-green-500 inline-block" />
                                               {vehicleCount} Vehicles
-                                            </span>span>
+                                            </span>
                                             <span className="flex items-center gap-1.5">
                                                           <span className="w-2.5 h-2.5 rounded-full bg-blue-400 inline-block" />
                                               {vesselCount} Vessels
-                                            </span>span>
+                                            </span>
                                             <span className="flex items-center gap-1.5">
                                                           <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block" />
                                               {activeAlerts} Alerts
-                                            </span>span>
-                                </div>div>
-                      </div>div>
-              </div>div>
+                                            </span>
+                                </div>
+                      </div>
+              </div>
         
           {/* Legend */}
               <div className="absolute bottom-8 right-4 bg-gray-900/90 backdrop-blur border border-gray-700 rounded-lg px-4 py-3 text-white text-xs pointer-events-none">
-                      <p className="font-semibold mb-2 text-gray-300">AI Risk Level</p>p>
+                      <p className="font-semibold mb-2 text-gray-300">AI Risk Level</p>
                 {[
           { color: 'bg-red-500', label: 'Critical Risk' },
           { color: 'bg-orange-500', label: 'High Risk' },
@@ -432,10 +432,10 @@ export default function StrategicMap() {
                   ].map(({ color, label }) => (
                               <div key={label} className="flex items-center gap-2 mb-1">
                                           <span className={`w-3 h-3 rounded-sm ${color}`} />
-                                          <span>{label}</span>span>
-                              </div>div>
+                                          <span>{label}</span>
+                              </div>
                             ))}
-              </div>div>
-        </div>div>
+              </div>
+        </div>
       )
-}</div>
+}

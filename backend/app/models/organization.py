@@ -3,7 +3,7 @@ Organization Model — Multi-Tenant Support
 Each organization is a tenant (logistics company, port authority, mining co, etc.)
 """
 
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, JSON
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, JSON
 from datetime import datetime, timezone
 
 from app.core.database import Base

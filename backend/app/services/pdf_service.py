@@ -4,27 +4,26 @@ Compliance reports and case documentation
 """
 
 import logging
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 from datetime import datetime, timezone
 from io import BytesIO
-from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 # Always use reportlab for local development (weasyprint requires system libraries)
 PDF_ENGINE = "reportlab"
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter, A4
+from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
-from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.enums import TA_CENTER
 
 # Optional: Try to import weasyprint for production environments with proper dependencies
 HTML = None
 CSS = None
 try:
-    from weasyprint import HTML, CSS
+    from weasyprint import HTML  # noqa: F401
     PDF_ENGINE = "weasyprint"
 except (ImportError, OSError):
     # WeasyPrint requires system libraries (pango, cairo, gdk-pixbuf)

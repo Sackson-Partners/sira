@@ -12,7 +12,7 @@ from app.core.security import get_current_user
 from app.models.shipment import Shipment, ShipmentException
 from app.models.vessel import Vessel
 from app.models.asset import Asset
-from app.models.port import Port, Berth, BerthBooking
+from app.models.port import Port
 from app.models.corridor import Corridor
 from app.models.freight import DemurrageRecord
 from app.models.user import User

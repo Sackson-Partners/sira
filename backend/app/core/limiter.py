@@ -10,12 +10,14 @@ import os
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
+
 def _get_storage_uri() -> str:
     """Return Redis URI if configured, else in-memory (single-instance only)."""
     redis_url = os.getenv("REDIS_URL")
     if redis_url:
         return redis_url
     return "memory://"
+
 
 limiter = Limiter(
     key_func=get_remote_address,

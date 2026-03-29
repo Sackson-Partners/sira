@@ -129,7 +129,7 @@ async def get_current_user(
 
 def require_role(allowed_roles: list):
     """Dependency factory to check user role"""
-    async def role_checker(current_user = Depends(get_current_user)):
+    async def role_checker(current_user=Depends(get_current_user)):
         if current_user.role not in allowed_roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

@@ -7,7 +7,6 @@ Phase 2+: Will integrate ML models (TensorFlow/PyTorch) for improved accuracy
 
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any
-from sqlalchemy.orm import Session
 import logging
 import math
 

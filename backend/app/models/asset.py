@@ -2,7 +2,7 @@
 Fleet & Asset Model - Trucks, rail wagons, equipment, and asset management
 """
 
-from sqlalchemy import Column, Integer, String, Text, DateTime, Float, Boolean, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, DateTime, Float, ForeignKey
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 
