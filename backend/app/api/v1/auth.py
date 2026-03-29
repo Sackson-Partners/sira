@@ -2,12 +2,13 @@
 Authentication Routes
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 
 from app.core.database import get_db
+from app.core.limiter import limiter
 from app.core.security import (
     verify_password, hash_password, create_access_token,
     create_refresh_token, decode_token, get_current_user
@@ -22,7 +23,10 @@ router = APIRouter()
 
 
 @router.post("/token", response_model=Token)
+@limiter.limit("5/minute")
 async def login(
+    request: Request,
+    response: Response,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db)
 ):
@@ -30,7 +34,8 @@ async def login(
     user = db.query(User).filter(User.username == form_data.username).first()
 
     if not user or not verify_password(form_data.password, user.hashed_password):
-        logger.warning(f"Failed login attempt for user: {form_data.username}")
+        # Generic message — do not reveal whether username or password is wrong
+        logger.warning(f"Failed login attempt for username: {form_data.username!r}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
@@ -51,12 +56,15 @@ async def login(
         data={"sub": user.username, "role": user.role, "user_id": user.id}
     )
 
-    logger.info(f"User logged in: {user.username}")
+    logger.info(f"Successful login: user_id={user.id}")
     return {"access_token": access_token, "token_type": "bearer"}
 
 
 @router.post("/token/refresh", response_model=Token)
+@limiter.limit("10/minute")
 async def refresh_token(
+    request: Request,
+    response: Response,
     refresh_token: str,
     db: Session = Depends(get_db)
 ):
@@ -95,26 +103,26 @@ async def refresh_token(
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("3/minute")
 async def register(
+    request: Request,
+    response: Response,
     user_data: UserCreate,
     db: Session = Depends(get_db)
 ):
     """Register a new user (self-registration as operator)"""
-    # Check if username exists
     if db.query(User).filter(User.username == user_data.username).first():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Username already registered"
         )
 
-    # Check if email exists
     if db.query(User).filter(User.email == user_data.email).first():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email already registered"
         )
 
-    # Create user (default role is operator for self-registration)
     new_user = User(
         username=user_data.username,
         email=user_data.email,
@@ -129,12 +137,15 @@ async def register(
     db.commit()
     db.refresh(new_user)
 
-    logger.info(f"New user registered: {new_user.username}")
+    logger.info(f"New user registered: user_id={new_user.id}")
     return new_user
 
 
 @router.post("/change-password")
+@limiter.limit("5/minute")
 async def change_password(
+    request: Request,
+    response: Response,
     password_data: PasswordChange,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -149,7 +160,7 @@ async def change_password(
     current_user.hashed_password = hash_password(password_data.new_password)
     db.commit()
 
-    logger.info(f"Password changed for user: {current_user.username}")
+    logger.info(f"Password changed: user_id={current_user.id}")
     return {"message": "Password changed successfully"}
 
 

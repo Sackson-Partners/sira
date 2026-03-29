@@ -23,8 +23,8 @@ class Settings(BaseSettings):
     DB_POOL_SIZE: int = 10
     DB_MAX_OVERFLOW: int = 20
 
-    # Security
-    SECRET_KEY: str = "your-secret-key-change-in-production-min-32-chars"
+    # Security — SECRET_KEY has no default: the app will refuse to start if this is not set
+    SECRET_KEY: str
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7

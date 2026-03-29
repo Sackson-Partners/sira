@@ -5,6 +5,7 @@ __pycache__/
 *.pyc
 *.db
 venv/
+backend/.venv/
 node_modules/
 frontend/node_modules/
 *.md
@@ -12,3 +13,17 @@ frontend/node_modules/
 .env.local
 frontend/node_modules/
 frontend/dist/
+*.log
+uploads/
+docs/
+.github/
+backend/tests/
+backend/alembic/
+sira/
+backend/sira/
+frontend/sira/
+render.yaml
+railway.json
+start-dev.sh
+render-build.sh
+docker-compose*.yml
