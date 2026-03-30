@@ -162,8 +162,18 @@ async def login(
     """Login to obtain access token (legacy OAuth2 form endpoint)"""
     user = db.query(User).filter(User.username == form_data.username).first()
 
-    if not user or not verify_password(form_data.password, user.hashed_password):
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    _check_lockout(user)
+
+    if not verify_password(form_data.password, user.hashed_password):
         logger.warning(f"Failed login attempt for username: {form_data.username!r}")
+        _handle_failed_login(user, db)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
@@ -295,10 +305,37 @@ async def reset_password(
     db: Session = Depends(get_db)
 ):
     """Reset password using reset token."""
-    raise HTTPException(
+    invalid_exc = HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail="Invalid or expired reset token"
+        detail="Invalid or expired reset token",
     )
+    # Find users with a pending reset token that has not expired
+    users = (
+        db.query(User)
+        .filter(
+            User.password_reset_token.isnot(None),
+            User.password_reset_expires > datetime.now(timezone.utc),
+        )
+        .all()
+    )
+    matched_user = None
+    for u in users:
+        if u.password_reset_token and verify_password(body.token, u.password_reset_token):
+            matched_user = u
+            break
+
+    if not matched_user:
+        raise invalid_exc
+
+    matched_user.hashed_password = hash_password(body.new_password)
+    matched_user.password_reset_token = None
+    matched_user.password_reset_expires = None
+    matched_user.failed_login_attempts = 0
+    matched_user.is_locked = False
+    matched_user.locked_until = None
+    db.commit()
+    logger.info(f"Password reset completed: user_id={matched_user.id}")
+    return {"message": "Password reset successfully"}
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)

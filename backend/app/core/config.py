@@ -79,8 +79,13 @@ class Settings(BaseSettings):
     # AI Intelligence Engine
     ANTHROPIC_API_KEY: Optional[str] = None
     OPENAI_API_KEY: Optional[str] = None
-    AI_MODEL: str = "claude-sonnet-4-20250514"
+    AI_MODEL: str = "claude-sonnet-4-5"
     AI_MAX_TOKENS: int = 4096
+
+    # Supabase (optional — only needed when using Supabase JWT auth)
+    SUPABASE_URL: Optional[str] = None
+    SUPABASE_SERVICE_KEY: Optional[str] = None
+    SUPABASE_JWT_SECRET: Optional[str] = None
 
     # Mapbox
     MAPBOX_ACCESS_TOKEN: Optional[str] = None

@@ -4,6 +4,7 @@ Provides AI-powered analytics using Claude (Anthropic) or OpenAI.
 Capabilities: ETA prediction, risk scoring, anomaly detection, natural language queries.
 """
 
+import asyncio
 import json
 import logging
 from datetime import datetime, timezone
@@ -82,11 +83,15 @@ When uncertain, state your confidence level. Format responses with clear section
         """Chat using Anthropic Claude API."""
         try:
             client = self._get_anthropic_client()
-            response = client.messages.create(
-                model=settings.AI_MODEL,
-                max_tokens=settings.AI_MAX_TOKENS,
-                system=system,
-                messages=messages,
+            loop = asyncio.get_running_loop()
+            response = await loop.run_in_executor(
+                None,
+                lambda: client.messages.create(
+                    model=settings.AI_MODEL,
+                    max_tokens=settings.AI_MAX_TOKENS,
+                    system=system,
+                    messages=messages,
+                ),
             )
             return response.content[0].text
         except Exception as e:
@@ -98,10 +103,14 @@ When uncertain, state your confidence level. Format responses with clear section
         try:
             client = self._get_openai_client()
             oai_messages = [{"role": "system", "content": system}] + messages
-            response = client.chat.completions.create(
-                model="gpt-4o",
-                max_tokens=settings.AI_MAX_TOKENS,
-                messages=oai_messages,
+            loop = asyncio.get_running_loop()
+            response = await loop.run_in_executor(
+                None,
+                lambda: client.chat.completions.create(
+                    model="gpt-4o",
+                    max_tokens=settings.AI_MAX_TOKENS,
+                    messages=oai_messages,
+                ),
             )
             return response.choices[0].message.content
         except Exception as e:
