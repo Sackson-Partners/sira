@@ -110,12 +110,6 @@ async def unlock_user(
     return {"message": f"User {user.username} unlocked"}
 
 
-VALID_ROLES = {
-    "operator", "security_lead", "supervisor", "admin",
-    "super_admin", "org_admin", "manager", "analyst", "viewer", "api_client",
-}
-
-
 @router.post("/users/{user_id}/change-role")
 async def change_user_role(
     user_id: int,
@@ -124,11 +118,6 @@ async def change_user_role(
     current_user: User = _require_sa,
 ):
     """Change a user's role."""
-    if new_role not in VALID_ROLES:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Invalid role '{new_role}'. Must be one of: {sorted(VALID_ROLES)}",
-        )
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
