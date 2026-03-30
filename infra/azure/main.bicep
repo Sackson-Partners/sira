@@ -13,8 +13,8 @@ param location string = 'southafricanorth'
 @description('Environment: dev, staging, prod')
 param environment string = 'staging'
 
-@description('Docker Hub image registry')
-param registry string = 'docker.io/sacksons'
+@description('Azure Container Registry name (globally unique, alphanumeric, 5-50 chars). Example: siraregistry')
+param acrName string
 
 @description('JWT secret key. Generate: python3 -c "import secrets; print(secrets.token_hex(32))"')
 @secure()
@@ -47,7 +47,7 @@ module containerApps 'modules/container-apps.bicep' = {
   params: {
     location: location
     environment: environment
-    registry: registry
+    acrName: acrName
     secretKey: secretKey
     databaseUrl: 'postgresql://${database.outputs.adminLogin}:${dbAdminPassword}@${database.outputs.fqdn}/${database.outputs.databaseName}?sslmode=require'
     allowedOrigins: allowedOrigins
@@ -59,5 +59,7 @@ module containerApps 'modules/container-apps.bicep' = {
 // ---------------------------------------------------------------------------
 output containerAppsEnvId string = containerApps.outputs.containerAppsEnvId
 output apiGatewayFqdn string = containerApps.outputs.apiGatewayFqdn
+output acrLoginServer string = containerApps.outputs.acrLoginServer
+output acrName string = containerApps.outputs.acrName
 output keyVaultName string = containerApps.outputs.keyVaultName
 output databaseFqdn string = database.outputs.fqdn

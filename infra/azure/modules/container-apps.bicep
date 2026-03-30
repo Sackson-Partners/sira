@@ -1,10 +1,10 @@
-// SIRA Platform - Azure Container Apps + Key Vault + Managed Identity
+// SIRA Platform - Azure Container Registry + Container Apps + Key Vault + Managed Identity
 // Resource Group: sira-rg | Phase 2 MVP
 //
 // SECRET HANDLING: secretKey and databaseUrl are @secure() params.
 // Their values are written into Key Vault at deploy time.
-// Container Apps reference secrets via keyVaultUrl + managed identity —
-// no secret value ever appears in plaintext environment variables.
+// Container Apps pull from ACR and read secrets via managed identity —
+// no credentials or secret values ever appear in plaintext env vars.
 
 @description('Azure region')
 param location string
@@ -12,8 +12,8 @@ param location string
 @description('Environment tag')
 param environment string
 
-@description('Docker Hub image registry')
-param registry string = 'docker.io/sacksons'
+@description('Azure Container Registry name (globally unique, alphanumeric, 5-50 chars)')
+param acrName string
 
 @description('Database URL. Required — no default. Stored in Key Vault.')
 @secure()
@@ -41,12 +41,39 @@ resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
 
 // ---------------------------------------------------------------------------
 // User-Assigned Managed Identity
-// Container Apps use this identity to read secrets from Key Vault.
+// Container Apps use this identity to pull from ACR and read KV secrets.
 // ---------------------------------------------------------------------------
 resource siraIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
   name: 'sira-identity-${environment}'
   location: location
   tags: { project: 'SIRA', environment: environment }
+}
+
+// ---------------------------------------------------------------------------
+// Azure Container Registry
+// Stores all SIRA Docker images. Admin user disabled — managed identity pulls.
+// ---------------------------------------------------------------------------
+resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
+  name: acrName
+  location: location
+  sku: { name: environment == 'production' ? 'Standard' : 'Basic' }
+  properties: { adminUserEnabled: false }
+  tags: { project: 'SIRA', environment: environment }
+}
+
+// Grant managed identity the AcrPull role on the registry.
+// Role ID 7f951dda-4ed3-4680-a7ca-43fe172d538d = AcrPull
+resource acrPullRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(acr.id, siraIdentity.id, 'acr-pull')
+  scope: acr
+  properties: {
+    roleDefinitionId: subscriptionResourceId(
+      'Microsoft.Authorization/roleDefinitions',
+      '7f951dda-4ed3-4680-a7ca-43fe172d538d'
+    )
+    principalId: siraIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -60,7 +87,7 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
   properties: {
     sku: { family: 'A', name: 'standard' }
     tenantId: subscription().tenantId
-    enableRbacAuthorization: true   // use role assignments, not access policies
+    enableRbacAuthorization: true
     enableSoftDelete: true
     softDeleteRetentionInDays: 7
     publicNetworkAccess: 'Enabled'
@@ -72,8 +99,8 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
   tags: { project: 'SIRA', environment: environment }
 }
 
-// Grant the managed identity the "Key Vault Secrets User" role on the vault.
-// Role ID 4633458b-17de-408a-b874-0445c86b69e6 = Key Vault Secrets User (read-only).
+// Grant managed identity Key Vault Secrets User role (read-only).
+// Role ID 4633458b-17de-408a-b874-0445c86b69e6 = Key Vault Secrets User
 resource kvSecretsUserRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(keyVault.id, siraIdentity.id, 'kv-secrets-user')
   scope: keyVault
@@ -124,7 +151,7 @@ resource containerAppsEnv 'Microsoft.App/managedEnvironments@2023-05-01' = {
 resource apiGateway 'Microsoft.App/containerApps@2023-05-01' = {
   name: 'sira-api-${environment}'
   location: location
-  dependsOn: [kvSecretsUserRole]
+  dependsOn: [kvSecretsUserRole, acrPullRole]
   identity: {
     type: 'UserAssigned'
     userAssignedIdentities: { '${siraIdentity.id}': {} }
@@ -138,6 +165,12 @@ resource apiGateway 'Microsoft.App/containerApps@2023-05-01' = {
         targetPort: 8000
         transport: 'http'
       }
+      registries: [
+        {
+          server: acr.properties.loginServer
+          identity: siraIdentity.id
+        }
+      ]
       secrets: [
         {
           name: 'secret-key'
@@ -154,7 +187,7 @@ resource apiGateway 'Microsoft.App/containerApps@2023-05-01' = {
     template: {
       containers: [{
         name: 'api-gateway'
-        image: '${registry}/sira-api:latest'
+        image: '${acr.properties.loginServer}/sira-api:latest'
         resources: { cpu: json('0.5'), memory: '1Gi' }
         env: [
           { name: 'ENVIRONMENT',     value: environment }
@@ -177,7 +210,7 @@ resource apiGateway 'Microsoft.App/containerApps@2023-05-01' = {
 resource telematicsWorker 'Microsoft.App/containerApps@2023-05-01' = {
   name: 'sira-telematics-${environment}'
   location: location
-  dependsOn: [kvSecretsUserRole]
+  dependsOn: [kvSecretsUserRole, acrPullRole]
   identity: {
     type: 'UserAssigned'
     userAssignedIdentities: { '${siraIdentity.id}': {} }
@@ -186,6 +219,7 @@ resource telematicsWorker 'Microsoft.App/containerApps@2023-05-01' = {
     managedEnvironmentId: containerAppsEnv.id
     configuration: {
       activeRevisionsMode: 'Single'
+      registries: [{ server: acr.properties.loginServer, identity: siraIdentity.id }]
       secrets: [
         { name: 'secret-key',   keyVaultUrl: kvSecretKey.properties.secretUri,   identity: siraIdentity.id }
         { name: 'database-url', keyVaultUrl: kvDatabaseUrl.properties.secretUri, identity: siraIdentity.id }
@@ -194,7 +228,7 @@ resource telematicsWorker 'Microsoft.App/containerApps@2023-05-01' = {
     template: {
       containers: [{
         name: 'telematics-worker'
-        image: '${registry}/sira-telematics:latest'
+        image: '${acr.properties.loginServer}/sira-telematics:latest'
         resources: { cpu: json('0.25'), memory: '0.5Gi' }
         env: [
           { name: 'ENVIRONMENT',  value: environment }
@@ -214,7 +248,7 @@ resource telematicsWorker 'Microsoft.App/containerApps@2023-05-01' = {
 resource maritimeWorker 'Microsoft.App/containerApps@2023-05-01' = {
   name: 'sira-maritime-${environment}'
   location: location
-  dependsOn: [kvSecretsUserRole]
+  dependsOn: [kvSecretsUserRole, acrPullRole]
   identity: {
     type: 'UserAssigned'
     userAssignedIdentities: { '${siraIdentity.id}': {} }
@@ -223,6 +257,7 @@ resource maritimeWorker 'Microsoft.App/containerApps@2023-05-01' = {
     managedEnvironmentId: containerAppsEnv.id
     configuration: {
       activeRevisionsMode: 'Single'
+      registries: [{ server: acr.properties.loginServer, identity: siraIdentity.id }]
       secrets: [
         { name: 'secret-key',   keyVaultUrl: kvSecretKey.properties.secretUri,   identity: siraIdentity.id }
         { name: 'database-url', keyVaultUrl: kvDatabaseUrl.properties.secretUri, identity: siraIdentity.id }
@@ -231,7 +266,7 @@ resource maritimeWorker 'Microsoft.App/containerApps@2023-05-01' = {
     template: {
       containers: [{
         name: 'maritime-worker'
-        image: '${registry}/sira-maritime:latest'
+        image: '${acr.properties.loginServer}/sira-maritime:latest'
         resources: { cpu: json('0.25'), memory: '0.5Gi' }
         env: [
           { name: 'ENVIRONMENT',  value: environment }
@@ -251,7 +286,7 @@ resource maritimeWorker 'Microsoft.App/containerApps@2023-05-01' = {
 resource aiWorker 'Microsoft.App/containerApps@2023-05-01' = {
   name: 'sira-ai-worker-${environment}'
   location: location
-  dependsOn: [kvSecretsUserRole]
+  dependsOn: [kvSecretsUserRole, acrPullRole]
   identity: {
     type: 'UserAssigned'
     userAssignedIdentities: { '${siraIdentity.id}': {} }
@@ -260,6 +295,7 @@ resource aiWorker 'Microsoft.App/containerApps@2023-05-01' = {
     managedEnvironmentId: containerAppsEnv.id
     configuration: {
       activeRevisionsMode: 'Single'
+      registries: [{ server: acr.properties.loginServer, identity: siraIdentity.id }]
       secrets: [
         { name: 'secret-key',   keyVaultUrl: kvSecretKey.properties.secretUri,   identity: siraIdentity.id }
         { name: 'database-url', keyVaultUrl: kvDatabaseUrl.properties.secretUri, identity: siraIdentity.id }
@@ -268,7 +304,7 @@ resource aiWorker 'Microsoft.App/containerApps@2023-05-01' = {
     template: {
       containers: [{
         name: 'ai-worker'
-        image: '${registry}/sira-ai:latest'
+        image: '${acr.properties.loginServer}/sira-ai:latest'
         resources: { cpu: json('0.5'), memory: '1Gi' }
         env: [
           { name: 'ENVIRONMENT',  value: environment }
@@ -286,7 +322,8 @@ resource aiWorker 'Microsoft.App/containerApps@2023-05-01' = {
 // Outputs
 // ---------------------------------------------------------------------------
 output containerAppsEnvId string = containerAppsEnv.id
-output acrLoginServer string = registry
+output acrLoginServer string = acr.properties.loginServer
+output acrName string = acr.name
 output apiGatewayFqdn string = apiGateway.properties.configuration.ingress.fqdn
 output keyVaultName string = keyVault.name
 output managedIdentityId string = siraIdentity.id

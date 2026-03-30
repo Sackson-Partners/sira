@@ -1,10 +1,23 @@
-name: CI/CD — SIRA Platform (Azure Container Apps)
+name: CI/CD — SIRA Platform (Azure Container Apps + ACR)
 
+# LOCAL DEV:  docker build / docker-compose (see backend/docker-compose.yml)
+# CI CLOUD:   docker buildx build → push to ACR → az containerapp update
+# ACR FALLBACK (no local Docker): az acr build --registry $ACR_NAME --image sira-api:tag ./backend
+#
+# Required GitHub secrets:  AZURE_CREDENTIALS, SECRET_KEY, DB_ADMIN_PASSWORD,
+#                            ALLOWED_ORIGINS, DATABASE_URL
+# Required GitHub variables: ACR_NAME  (e.g. "siraregistry" — must match Bicep acrName param)
+#
+# Service principal in AZURE_CREDENTIALS needs:
+#   - Contributor on resource group sira-rg
+#   - AcrPush on the ACR  (or Contributor includes it)
+#
 # Triggers:
 #   push to main/security-audit-on-main → test → build → deploy to staging
 #   push tag v*.*.*                      → test → build → deploy to production
-#   pull_request to main                 → test only (no secrets)
-#   workflow_dispatch                    → choose environment and whether to redeploy infra
+#   pull_request to main                 → test only (no push secrets)
+#   workflow_dispatch                    → choose environment; optionally redeploy Bicep
+
 on:
   push:
     branches: [main, security-audit-on-main]
@@ -27,8 +40,6 @@ on:
 
 env:
   PYTHON_VERSION: "3.11"
-  REGISTRY: docker.io
-  IMAGE_NAME: sacksons/sira-api          # matches infra/azure/main.bicep registry param
   RESOURCE_GROUP: sira-rg
   LOCATION: southafricanorth
 
@@ -66,18 +77,24 @@ jobs:
           DATABASE_URL: ""   # tests use in-memory SQLite via conftest.py
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Job 2 — Build & Push Docker image to Docker Hub
-# Skipped on pull_request (no secrets available there).
+# Job 2 — Build & Push Docker image to Azure Container Registry
+#
+# Two methods available:
+#   PRIMARY  — docker buildx build --push  (uses GHA Docker daemon + layer cache)
+#   FALLBACK — az acr build               (cloud build, no local Docker needed)
+#              Run locally: az acr build --registry $ACR_NAME --image sira-api:tag ./backend
+#
+# Skipped on pull_request (no push secrets available there).
 # ─────────────────────────────────────────────────────────────────────────────
   build-push:
-    name: Build & Push image
+    name: Build & Push to ACR
     needs: test
     runs-on: ubuntu-latest
     if: github.event_name != 'pull_request'
 
     outputs:
-      image_tag: ${{ steps.meta.outputs.version }}
       short_sha: ${{ steps.sha.outputs.value }}
+      acr_login_server: ${{ steps.acr.outputs.login_server }}
 
     steps:
       - uses: actions/checkout@v4
@@ -86,41 +103,50 @@ jobs:
         id: sha
         run: echo "value=$(echo '${{ github.sha }}' | cut -c1-7)" >> "$GITHUB_OUTPUT"
 
-      - name: Docker metadata
-        id: meta
-        uses: docker/metadata-action@v5
+      - name: Azure login
+        uses: azure/login@v2
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=ref,event=branch
-            type=sha,prefix=sha-,format=short
-            type=raw,value=latest,enable={{is_default_branch}}
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Get ACR login server
+        id: acr
+        run: |
+          LOGIN_SERVER=$(az acr show \
+            --name "${{ vars.ACR_NAME }}" \
+            --resource-group "${{ env.RESOURCE_GROUP }}" \
+            --query loginServer -o tsv)
+          echo "login_server=${LOGIN_SERVER}" >> "$GITHUB_OUTPUT"
+          echo "ACR: ${LOGIN_SERVER}"
+
+      - name: Log in to ACR
+        run: az acr login --name "${{ vars.ACR_NAME }}"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build and push
+      - name: Build and push (primary — local Docker + GHA cache)
         uses: docker/build-push-action@v6
         with:
           context: backend
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: |
+            ${{ steps.acr.outputs.login_server }}/sira-api:sha-${{ steps.sha.outputs.value }}
+            ${{ steps.acr.outputs.login_server }}/sira-api:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # FALLBACK: uncomment and replace the step above when local Docker is unavailable
+      # - name: Build and push (fallback — az acr build, no local Docker)
+      #   run: |
+      #     az acr build \
+      #       --registry "${{ vars.ACR_NAME }}" \
+      #       --image "sira-api:sha-${{ steps.sha.outputs.value }}" \
+      #       --image "sira-api:latest" \
+      #       backend/
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Job 3 — Deploy Infrastructure via Bicep (slow path, on-demand only)
-# Only runs when workflow_dispatch is triggered with deploy_infra=true.
-# Use this for first-time setup or when infra config changes.
+# Use for first-time setup or when infra config changes.
 # ─────────────────────────────────────────────────────────────────────────────
   deploy-infra:
     name: Deploy Bicep infrastructure
@@ -154,7 +180,7 @@ jobs:
             --parameters \
               environment="${{ github.event.inputs.environment }}" \
               location="${{ env.LOCATION }}" \
-              registry="docker.io/sacksons" \
+              acrName="${{ vars.ACR_NAME }}" \
               secretKey="${{ secrets.SECRET_KEY }}" \
               dbAdminPassword="${{ secrets.DB_ADMIN_PASSWORD }}" \
               allowedOrigins="${{ secrets.ALLOWED_ORIGINS }}"
@@ -168,15 +194,17 @@ jobs:
             --parameters \
               environment="${{ github.event.inputs.environment }}" \
               location="${{ env.LOCATION }}" \
-              registry="docker.io/sacksons" \
+              acrName="${{ vars.ACR_NAME }}" \
               secretKey="${{ secrets.SECRET_KEY }}" \
               dbAdminPassword="${{ secrets.DB_ADMIN_PASSWORD }}" \
               allowedOrigins="${{ secrets.ALLOWED_ORIGINS }}" \
             --output json | tee /tmp/bicep-output.json
 
           FQDN=$(jq -r '.properties.outputs.apiGatewayFqdn.value' /tmp/bicep-output.json)
+          ACR=$(jq -r '.properties.outputs.acrLoginServer.value' /tmp/bicep-output.json)
           echo "api_fqdn=${FQDN}" >> "$GITHUB_OUTPUT"
-          echo "API FQDN: ${FQDN}"
+          echo "acr_login_server=${ACR}" >> "$GITHUB_OUTPUT"
+          echo "API FQDN: ${FQDN}  |  ACR: ${ACR}"
 
       - name: Run Alembic migrations
         working-directory: backend
@@ -188,13 +216,12 @@ jobs:
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Job 4 — Deploy App (fast path — update image only)
-# Runs on every push to main or tags; skips if deploy-infra ran instead.
+# Runs on every push to main/tags. Skipped when deploy-infra ran instead.
 # ─────────────────────────────────────────────────────────────────────────────
   deploy-app:
     name: Deploy app to Azure Container Apps
     needs: build-push
     runs-on: ubuntu-latest
-    # Run when: not a PR, AND not doing a full infra redeploy
     if: |
       github.event_name != 'pull_request' &&
       !(github.event_name == 'workflow_dispatch' && github.event.inputs.deploy_infra == 'true')
@@ -237,7 +264,8 @@ jobs:
         run: |
           APP_NAME="sira-api-${{ steps.env.outputs.name }}"
           SHORT_SHA="${{ needs.build-push.outputs.short_sha }}"
-          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${SHORT_SHA}"
+          ACR_SERVER="${{ needs.build-push.outputs.acr_login_server }}"
+          IMAGE="${ACR_SERVER}/sira-api:sha-${SHORT_SHA}"
 
           echo "Deploying ${IMAGE} to ${APP_NAME} ..."
           az containerapp update \
@@ -261,7 +289,7 @@ jobs:
             sleep 10
           done
 
-      - name: Health check — /health
+      - name: Health check — /health → 200
         id: health
         run: |
           APP_NAME="sira-api-${{ steps.env.outputs.name }}"
@@ -294,5 +322,5 @@ jobs:
           | Environment | ${{ steps.env.outputs.name }} |
           | API | https://${FQDN} |
           | Docs | https://${FQDN}/docs |
-          | Image | ${{ env.IMAGE_NAME }}:sha-${SHORT_SHA} |
+          | Image | ${{ vars.ACR_NAME }}.azurecr.io/sira-api:sha-${SHORT_SHA} |
           EOF
