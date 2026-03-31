@@ -10,6 +10,7 @@ import os
 # ── Test environment variables ────────────────────────────────────────────────
 # Must be set before *any* app module is imported (settings is created at import
 # time via @lru_cache).
+os.environ.setdefault("DATABASE_URL", "sqlite:///./test.db")   # prevent empty-URL crash at import
 os.environ.setdefault("SECRET_KEY", "sira-test-secret-key-for-tests-only-min-32-chars!")
 os.environ.setdefault("ADMIN_INITIAL_PASSWORD", "TestAdmin@Sira1")
 os.environ.setdefault("DEBUG", "false")  # production-like; docs are hidden

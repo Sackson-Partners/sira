@@ -73,8 +73,17 @@ jobs:
             --cov=app --cov-report=term-missing \
             --cov-fail-under=80
         env:
-          SECRET_KEY: ci-only-test-secret-key
-          DATABASE_URL: ""   # tests use in-memory SQLite via conftest.py
+          DATABASE_URL: "sqlite:///./test.db"
+          TEST_DATABASE_URL: "sqlite:///./test.db"
+          SECRET_KEY: "ci-test-secret-key-32-characters!!"
+          SUPABASE_URL: "https://test.supabase.co"
+          SUPABASE_JWT_SECRET: "ci-test-jwt-secret"
+          ANTHROPIC_API_KEY: "test-key"
+          OPENAI_API_KEY: "test-key"
+          FLESPI_TOKEN: "test-token"
+          MARINETRAFFIC_API_KEY: "test-key"
+          MAPBOX_ACCESS_TOKEN: "test-key"
+          ALLOWED_ORIGINS: "http://localhost:3000"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Job 2 — Build & Push Docker image to Azure Container Registry
