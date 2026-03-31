@@ -16,9 +16,9 @@ const ProtectedRoute: React.FC<Props> = ({
   requiredPermission,
   fallback = '/login',
 }) => {
-  const { isAuthenticated, user, isLoading } = useAuth();
+  const { isAuthenticated, user, isInitializing } = useAuth();
 
-  if (isLoading) {
+  if (isInitializing) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-950">
         <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-blue-500" />
