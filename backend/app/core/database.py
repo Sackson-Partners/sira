@@ -12,20 +12,27 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+# Resolve the database URL: empty string (e.g. CI with DATABASE_URL="") falls
+# back to SQLite so the module can be imported without a real database.
+_DATABASE_URL = settings.DATABASE_URL or "sqlite:///./sira.db"
+# Fix asyncpg URLs — this engine is sync-only (psycopg2).
+if _DATABASE_URL.startswith("postgresql+asyncpg://"):
+    _DATABASE_URL = _DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
+
 # Determine if using SQLite
-is_sqlite = settings.DATABASE_URL.startswith("sqlite")
+is_sqlite = _DATABASE_URL.startswith("sqlite")
 
 # Create engine with appropriate settings for database type
 if is_sqlite:
     engine = create_engine(
-        settings.DATABASE_URL,
+        _DATABASE_URL,
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
         echo=settings.DEBUG,
     )
 else:
     engine = create_engine(
-        settings.DATABASE_URL,
+        _DATABASE_URL,
         pool_pre_ping=True,
         pool_size=settings.DB_POOL_SIZE,
         max_overflow=settings.DB_MAX_OVERFLOW,

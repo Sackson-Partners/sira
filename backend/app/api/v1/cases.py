@@ -23,12 +23,22 @@ router = APIRouter()
 
 
 def generate_case_number(db: Session) -> str:
-    """Generate a unique case number"""
+    """Generate a unique case number with retry on collision."""
+    from sqlalchemy import text
     year = datetime.now(timezone.utc).year
-    count = db.query(Case).filter(
-        Case.case_number.like(f"CASE-{year}-%")
-    ).count()
-    return f"CASE-{year}-{count + 1:04d}"
+    # Use SELECT ... FOR UPDATE on a locked count to prevent race conditions on
+    # Postgres; on SQLite it falls back to a plain count (tests only).
+    for attempt in range(10):
+        count = db.query(Case).filter(
+            Case.case_number.like(f"CASE-{year}-%")
+        ).with_for_update().count()
+        candidate = f"CASE-{year}-{count + 1:04d}"
+        # Check uniqueness explicitly before returning
+        if not db.query(Case).filter(Case.case_number == candidate).first():
+            return candidate
+    # Fallback: use timestamp suffix to guarantee uniqueness
+    ts = int(datetime.now(timezone.utc).timestamp())
+    return f"CASE-{year}-{ts}"
 
 
 @router.get("/", response_model=List[CaseResponse])

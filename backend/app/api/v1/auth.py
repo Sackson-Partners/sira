@@ -12,12 +12,16 @@ import logging
 from app.core.database import get_db
 from app.core.limiter import limiter
 from app.core.security import (
-    verify_password, hash_password, create_access_token,
+    verify_password, hash_password, create_access_token, create_refresh_token,
     decode_token, get_current_user
 )
+from app.core.roles import get_permissions
 from app.models.user import User
 from app.schemas.user import Token, UserCreate, UserResponse, PasswordChange
-import logging
+from app.schemas.auth import (
+    LoginRequest, TokenResponse, UserAuthResponse,
+    RefreshRequest, PasswordResetRequest, PasswordResetConfirm
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -162,8 +166,18 @@ async def login(
     """Login to obtain access token (legacy OAuth2 form endpoint)"""
     user = db.query(User).filter(User.username == form_data.username).first()
 
-    if not user or not verify_password(form_data.password, user.hashed_password):
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    _check_lockout(user)
+
+    if not verify_password(form_data.password, user.hashed_password):
         logger.warning(f"Failed login attempt for username: {form_data.username!r}")
+        _handle_failed_login(user, db)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",

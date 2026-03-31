@@ -23,7 +23,7 @@ class MarineTrafficService:
 
     @property
     def is_configured(self) -> bool:
-        return bool(self.api_key)
+        return bool(self.api_key and self.api_key not in ("", "test-key"))
 
     async def get_vessel_position(self, mmsi: str) -> Optional[Dict[str, Any]]:
         """Get current position for a vessel by MMSI."""
