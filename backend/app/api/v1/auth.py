@@ -354,6 +354,18 @@ async def register(
     return new_user
 
 
+@router.post("/signup", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("3/minute")
+async def signup(
+    request: Request,
+    response: Response,
+    user_data: UserCreate,
+    db: Session = Depends(get_db)
+):
+    """Sign up for a new account (alias for /register)."""
+    return await register(request=request, response=response, user_data=user_data, db=db)
+
+
 @router.post("/change-password")
 @limiter.limit("5/minute")
 async def change_password(

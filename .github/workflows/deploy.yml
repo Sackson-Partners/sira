@@ -120,15 +120,33 @@ jobs:
       - name: Get ACR login server
         id: acr
         run: |
+          # Use ACR_NAME variable if set; otherwise auto-discover from resource group
+          ACR_NAME="${{ vars.ACR_NAME }}"
+          if [ -z "$ACR_NAME" ]; then
+            echo "ACR_NAME variable not set — discovering from resource group..."
+            ACR_NAME=$(az acr list \
+              --resource-group "${{ env.RESOURCE_GROUP }}" \
+              --query "[0].name" -o tsv)
+            if [ -z "$ACR_NAME" ]; then
+              echo "ERROR: No ACR found in resource group ${{ env.RESOURCE_GROUP }}"
+              echo "Set the ACR_NAME variable in GitHub Actions settings."
+              exit 1
+            fi
+            echo "Discovered ACR: ${ACR_NAME}"
+          fi
           LOGIN_SERVER=$(az acr show \
-            --name "${{ vars.ACR_NAME }}" \
+            --name "$ACR_NAME" \
             --resource-group "${{ env.RESOURCE_GROUP }}" \
             --query loginServer -o tsv)
           echo "login_server=${LOGIN_SERVER}" >> "$GITHUB_OUTPUT"
+          echo "acr_name=${ACR_NAME}" >> "$GITHUB_OUTPUT"
           echo "ACR: ${LOGIN_SERVER}"
 
       - name: Log in to ACR
-        run: az acr login --name "${{ vars.ACR_NAME }}"
+        run: |
+          ACR_NAME="${{ steps.acr.outputs.acr_name }}"
+          [ -z "$ACR_NAME" ] && ACR_NAME="${{ vars.ACR_NAME }}"
+          az acr login --name "$ACR_NAME"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
