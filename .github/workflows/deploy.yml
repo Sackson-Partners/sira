@@ -297,13 +297,33 @@ jobs:
           APP_NAME="sira-api-${{ steps.env.outputs.name }}"
           SHORT_SHA="${{ needs.build-push.outputs.short_sha }}"
           ACR_SERVER="${{ needs.build-push.outputs.acr_login_server }}"
+          ACR_NAME="${{ steps.acr.outputs.acr_name }}"
+          [ -z "$ACR_NAME" ] && ACR_NAME="${{ vars.ACR_NAME }}"
           IMAGE="${ACR_SERVER}/sira-api:sha-${SHORT_SHA}"
 
-          echo "Deploying ${IMAGE} to ${APP_NAME} ..."
+          # Enable admin user so the Container App can authenticate against ACR
+          # at image-pull time (the service principal can push but the Container
+          # App runtime needs its own credentials to pull).
+          az acr update --name "$ACR_NAME" --admin-enabled true --output none
+
+          ACR_USERNAME=$(az acr credential show \
+            --name "$ACR_NAME" \
+            --resource-group "${{ env.RESOURCE_GROUP }}" \
+            --query username -o tsv)
+          ACR_PASSWORD=$(az acr credential show \
+            --name "$ACR_NAME" \
+            --resource-group "${{ env.RESOURCE_GROUP }}" \
+            --query "passwords[0].value" -o tsv)
+
+          echo "Deploying ${IMAGE} to ${APP_NAME} (container: api-gateway) ..."
           az containerapp update \
             --name "$APP_NAME" \
             --resource-group "${{ env.RESOURCE_GROUP }}" \
             --image "$IMAGE" \
+            --container-name "api-gateway" \
+            --registry-server "$ACR_SERVER" \
+            --registry-username "$ACR_USERNAME" \
+            --registry-password "$ACR_PASSWORD" \
             --output table
 
       - name: Wait for revision to become healthy
