@@ -30,39 +30,29 @@ class TestHealth:
         response = client.get("/")
         assert response.status_code == status.HTTP_200_OK
 
-    def test_docs_hidden_in_production(self, client):
-        """When DEBUG=False, FastAPI must have docs_url=None (Swagger UI disabled)."""
-        from app.core.config import settings
+    def test_docs_accessible(self, client):
+        """API docs (/docs) are always enabled — Swagger UI must be reachable."""
         from app.main import app
-        if settings.DEBUG:
-            pytest.skip("DEBUG=True in this environment — docs are intentionally visible")
-        # The SPA catch-all returns 200 for /docs (it serves the React app).
-        # The real check is that FastAPI's docs_url is None, meaning no Swagger UI route.
-        assert app.docs_url is None, "docs_url should be None in production"
-        # Verify the response is NOT the Swagger UI HTML
+        assert app.docs_url == "/docs", "docs_url must be /docs"
         response = client.get("/docs")
-        assert "swagger" not in response.text.lower()
-        assert "openapi" not in response.text.lower() or response.headers.get("content-type", "").startswith("text/html")
+        assert response.status_code == 200
+        assert "swagger" in response.text.lower() or "openapi" in response.text.lower()
 
-    def test_redoc_hidden_in_production(self, client):
-        from app.core.config import settings
+    def test_redoc_accessible(self, client):
+        """ReDoc (/redoc) is always enabled."""
         from app.main import app
-        if settings.DEBUG:
-            pytest.skip("DEBUG=True in this environment")
-        assert app.redoc_url is None, "redoc_url should be None in production"
+        assert app.redoc_url == "/redoc", "redoc_url must be /redoc"
+        response = client.get("/redoc")
+        assert response.status_code == 200
 
-    def test_openapi_schema_hidden_in_production(self, client):
-        """When DEBUG=False, /openapi.json must NOT return an OpenAPI schema."""
-        from app.core.config import settings
+    def test_openapi_schema_accessible(self, client):
+        """/openapi.json always returns the OpenAPI schema."""
         from app.main import app
-        if settings.DEBUG:
-            pytest.skip("DEBUG=True in this environment")
-        assert app.openapi_url is None, "openapi_url should be None in production"
-        # The SPA catch-all may return 200 but it must not be a valid OpenAPI document
+        assert app.openapi_url == "/openapi.json", "openapi_url must be /openapi.json"
         response = client.get("/openapi.json")
-        if response.status_code == 200:
-            data = response.json() if "application/json" in response.headers.get("content-type", "") else {}
-            assert "openapi" not in data, "openapi.json must not return an OpenAPI schema in production"
+        assert response.status_code == 200
+        data = response.json()
+        assert "openapi" in data
 
 
 class TestApiV1HealthEndpoints:
