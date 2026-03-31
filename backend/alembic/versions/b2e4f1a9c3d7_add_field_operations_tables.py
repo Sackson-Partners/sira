@@ -11,7 +11,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers
 revision = 'b2e4f1a9c3d7'
-down_revision = '04440dcecb17'
+down_revision = 'a9f3c2e8b501'
 branch_labels = None
 depends_on = None
 
