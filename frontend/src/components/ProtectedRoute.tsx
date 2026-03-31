@@ -30,11 +30,6 @@ const ProtectedRoute: React.FC<Props> = ({
     return <Navigate to={fallback} replace />;
   }
 
-  // Force password change
-  if (user.must_change_password && window.location.pathname !== '/change-password') {
-    return <Navigate to="/change-password" replace />;
-  }
-
   if (requiredRole) {
     const roles = Array.isArray(requiredRole) ? requiredRole : [requiredRole];
     if (!roles.includes(user.role as UserRole)) {

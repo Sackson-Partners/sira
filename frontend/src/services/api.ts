@@ -1,9 +1,11 @@
 import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios'
-import { useAuthStore } from '../stores/authStore'
+
+// Token key must match the key used by AuthContext
+const TOKEN_STORAGE_KEY = 'sira_access_token'
 
 // API base URL — empty string means same-origin requests.
 // Local dev: Vite proxy forwards /api/* to localhost:8000 (see vite.config.ts)
-// Production (PythonAnywhere): FastAPI serves both API and frontend on same domain
+// Production (Vercel): vercel.json rewrites /api/* to Azure Container App
 const API_BASE_URL = ''
 
 export const api: AxiosInstance = axios.create({
@@ -16,7 +18,7 @@ export const api: AxiosInstance = axios.create({
 // Request interceptor to add auth token
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    const token = useAuthStore.getState().token
+    const token = localStorage.getItem(TOKEN_STORAGE_KEY)
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
@@ -30,8 +32,10 @@ api.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
     if (error.response?.status === 401) {
-      // Token expired or invalid
-      useAuthStore.getState().logout()
+      // Token expired or invalid — clear all auth state and redirect to login
+      localStorage.removeItem('sira_access_token')
+      localStorage.removeItem('sira_refresh_token')
+      localStorage.removeItem('sira_user')
       window.location.href = '/login'
     }
     return Promise.reject(error)

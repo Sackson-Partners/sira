@@ -1,9 +1,7 @@
 import React from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
-import { useAuthStore } from './stores/authStore'
-import { AuthProvider } from './context/AuthContext'
+import { useAuth, AuthProvider } from './context/AuthContext'
 import Layout from './components/Layout'
-import Login from './pages/Login'
 import AuthLogin from './pages/auth/Login'
 import Dashboard from './pages/Dashboard'
 import Alerts from './pages/Alerts'
@@ -21,7 +19,7 @@ import Unauthorized from './pages/Unauthorized'
 import RoleDashboard from './pages/dashboards/RoleDashboard'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useAuthStore()
+  const { isAuthenticated } = useAuth()
   return isAuthenticated ? <>{children}</> : <Navigate to="/login" />
 }
 
@@ -29,7 +27,7 @@ function App() {
   return (
     <AuthProvider>
       <Routes>
-        <Route path="/login" element={<Login />} />
+        <Route path="/login" element={<AuthLogin />} />
         <Route path="/auth/login" element={<AuthLogin />} />
         <Route path="/unauthorized" element={<Unauthorized />} />
         <Route
