@@ -166,7 +166,16 @@ async def login(
     """Login to obtain access token (legacy OAuth2 form endpoint)"""
     user = db.query(User).filter(User.username == form_data.username).first()
 
-    if not user or not verify_password(form_data.password, user.hashed_password):
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    _check_lockout(user)
+
+    if not verify_password(form_data.password, user.hashed_password):
         logger.warning(f"Failed login attempt for username: {form_data.username!r}")
         _handle_failed_login(user, db)
         raise HTTPException(

@@ -28,7 +28,7 @@ class FlespiService:
 
     @property
     def is_configured(self) -> bool:
-        return bool(self.token)
+        return bool(self.token and self.token not in ("", "test-token"))
 
     async def get_devices(self) -> List[Dict[str, Any]]:
         """Fetch all devices from Flespi."""

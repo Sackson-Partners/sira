@@ -35,7 +35,12 @@ When uncertain, state your confidence level. Format responses with clear section
 
     @property
     def is_configured(self) -> bool:
-        return bool(settings.ANTHROPIC_API_KEY or settings.OPENAI_API_KEY)
+        claude = settings.ANTHROPIC_API_KEY
+        openai = settings.OPENAI_API_KEY
+        return bool(
+            (claude and claude.startswith("sk-ant-")) or
+            (openai and openai.startswith("sk-") and not openai.startswith("sk-ant-"))
+        )
 
     def _get_anthropic_client(self):
         if self._anthropic_client is None and settings.ANTHROPIC_API_KEY:

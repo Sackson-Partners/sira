@@ -17,6 +17,11 @@ from app.models.organization import Organization
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+VALID_ROLES = {
+    "operator", "security_lead", "supervisor", "admin",
+    "super_admin", "org_admin", "manager", "analyst", "viewer", "api_client",
+}
+
 _require_sa = Depends(require_super_admin())
 
 
@@ -123,6 +128,11 @@ async def change_user_role(
         raise HTTPException(status_code=404, detail="User not found")
     if user.id == current_user.id:
         raise HTTPException(status_code=400, detail="Cannot change your own role")
+    if new_role not in VALID_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid role '{new_role}'. Must be one of: {sorted(VALID_ROLES)}",
+        )
     old_role = user.role
     user.role = new_role
     db.commit()
