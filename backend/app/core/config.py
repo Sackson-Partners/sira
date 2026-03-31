@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     APP_VERSION: str = "2.0.0"
     DEBUG: bool = False
     LOG_LEVEL: str = "INFO"
+    # deployment environment: development | staging | production
+    # Controls docs visibility: production hides /docs, /redoc, /openapi.json
+    ENVIRONMENT: str = "development"
 
     # Database — defaults to SQLite if DATABASE_URL not set (e.g. Railway without Postgres addon)
     DATABASE_URL: str = "sqlite:///./sira.db"

@@ -31,23 +31,32 @@ class TestHealth:
         assert response.status_code == status.HTTP_200_OK
 
     def test_docs_accessible(self, client):
-        """API docs (/docs) are always enabled — Swagger UI must be reachable."""
+        """Docs are visible in non-production environments (ENVIRONMENT != 'production')."""
         from app.main import app
+        from app.core.config import settings
+        if settings.ENVIRONMENT == "production":
+            pytest.skip("ENVIRONMENT=production — docs hidden by design")
         assert app.docs_url == "/docs", "docs_url must be /docs"
         response = client.get("/docs")
         assert response.status_code == 200
         assert "swagger" in response.text.lower() or "openapi" in response.text.lower()
 
     def test_redoc_accessible(self, client):
-        """ReDoc (/redoc) is always enabled."""
+        """ReDoc visible in non-production environments."""
         from app.main import app
+        from app.core.config import settings
+        if settings.ENVIRONMENT == "production":
+            pytest.skip("ENVIRONMENT=production — docs hidden by design")
         assert app.redoc_url == "/redoc", "redoc_url must be /redoc"
         response = client.get("/redoc")
         assert response.status_code == 200
 
     def test_openapi_schema_accessible(self, client):
-        """/openapi.json always returns the OpenAPI schema."""
+        """/openapi.json visible in non-production environments."""
         from app.main import app
+        from app.core.config import settings
+        if settings.ENVIRONMENT == "production":
+            pytest.skip("ENVIRONMENT=production — docs hidden by design")
         assert app.openapi_url == "/openapi.json", "openapi_url must be /openapi.json"
         response = client.get("/openapi.json")
         assert response.status_code == 200
