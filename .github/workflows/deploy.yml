@@ -296,9 +296,9 @@ jobs:
         run: |
           APP_NAME="sira-api-${{ steps.env.outputs.name }}"
           SHORT_SHA="${{ needs.build-push.outputs.short_sha }}"
-          ACR_SERVER="${{ needs.build-push.outputs.acr_login_server }}"
-          ACR_NAME="${{ steps.acr.outputs.acr_name }}"
-          [ -z "$ACR_NAME" ] && ACR_NAME="${{ vars.ACR_NAME }}"
+          # ACR_NAME is hardcoded — vars.ACR_NAME is only available in build-push job
+          ACR_NAME="siracr2026"
+          ACR_SERVER="${ACR_NAME}.azurecr.io"
           IMAGE="${ACR_SERVER}/sira-api:sha-${SHORT_SHA}"
 
           az acr update --name "$ACR_NAME" --admin-enabled true --output none
