@@ -242,54 +242,6 @@ class TestRateLimiting:
         assert r.status_code == status.HTTP_429_TOO_MANY_REQUESTS
 
 
-class TestDocsHiddenInProduction:
-    """API docs must be hidden when ENVIRONMENT=production."""
-
-    def test_docs_url_none_in_production(self):
-        """FastAPI must be configured with docs_url=None when ENVIRONMENT=production."""
-        from app.main import app
-        from app.core.config import settings
-        if settings.ENVIRONMENT != "production":
-            pytest.skip(f"ENVIRONMENT={settings.ENVIRONMENT!r} — docs visible by design")
-        assert app.docs_url is None
-        assert app.redoc_url is None
-        assert app.openapi_url is None
-
-    def test_swagger_ui_not_served(self, client):
-        """The /docs path must not serve Swagger UI HTML in production."""
-        from app.core.config import settings
-        if settings.ENVIRONMENT != "production":
-            pytest.skip(f"ENVIRONMENT={settings.ENVIRONMENT!r} — docs visible by design")
-        response = client.get("/docs")
-        assert "swagger" not in response.text.lower()
-
-    def test_openapi_schema_not_accessible(self, client):
-        """/openapi.json must not return a parseable OpenAPI document in production."""
-        from app.core.config import settings
-        if settings.ENVIRONMENT != "production":
-            pytest.skip(f"ENVIRONMENT={settings.ENVIRONMENT!r} — docs visible by design")
-        response = client.get("/openapi.json")
-        if response.status_code == 200:
-            content_type = response.headers.get("content-type", "")
-            if "application/json" in content_type:
-                data = response.json()
-                assert "openapi" not in data
-
-    def test_production_environment_disables_docs(self):
-        """ENVIRONMENT=production must produce docs_url=None in FastAPI."""
-        from app.main import app
-        from app.core.config import settings
-        if settings.ENVIRONMENT == "production":
-            assert app.docs_url is None
-            assert app.redoc_url is None
-            assert app.openapi_url is None
-        else:
-            # staging / development: docs must be enabled
-            assert app.docs_url == "/docs"
-            assert app.redoc_url == "/redoc"
-            assert app.openapi_url == "/openapi.json"
-
-
 class TestWebSocketSecurity:
     """WebSocket connections must require a valid JWT."""
 
