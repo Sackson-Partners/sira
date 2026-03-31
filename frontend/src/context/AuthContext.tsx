@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import type { Session } from '@supabase/supabase-js'
+import toast from 'react-hot-toast'
 import { supabase } from '../utils/supabase'
 import { UserRole } from '../types/auth'
 
@@ -17,9 +18,9 @@ interface AuthUser {
 interface AuthContextType {
   user: AuthUser | null
   session: Session | null
-  isAuthenticated: boolean
-  isLoading: boolean       // true only while login() is in progress
-  isInitializing: boolean  // true while startup session check is running
+  isAuthenticated: boolean   // true when Supabase session exists (independent of backend profile)
+  isLoading: boolean         // true only while login() is in progress
+  isInitializing: boolean    // true while startup session check is running
   login: (email: string, password: string) => Promise<void>
   logout: () => Promise<void>
   hasPermission: (permission: string) => boolean
@@ -30,41 +31,57 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null)
 
-// Fetch the PostgreSQL user profile using the Supabase JWT
 async function fetchUserProfile(accessToken: string): Promise<AuthUser | null> {
   try {
     const res = await fetch('/api/v1/auth/me', {
       headers: { Authorization: `Bearer ${accessToken}` },
     })
-    if (!res.ok) return null
+    if (!res.ok) {
+      console.warn('[Auth] Profile fetch failed:', res.status)
+      return null
+    }
     return await res.json()
-  } catch {
+  } catch (err) {
+    console.warn('[Auth] Profile fetch error:', err)
     return null
   }
+}
+
+// Resolves after ms milliseconds with a fallback value
+function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>(resolve => setTimeout(() => resolve(fallback), ms)),
+  ])
 }
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [session, setSession] = useState<Session | null>(null)
   const [user, setUser] = useState<AuthUser | null>(null)
-  const [isLoading, setIsLoading] = useState(false)       // true only during login()
-  const [isInitializing, setIsInitializing] = useState(true) // true during startup session check
+  const [isLoading, setIsLoading] = useState(false)
+  const [isInitializing, setIsInitializing] = useState(true)
 
-  // Load initial session and subscribe to auth state changes
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    // 3-second timeout so a broken Supabase config never blocks the UI forever
+    withTimeout(
+      supabase.auth.getSession(),
+      3000,
+      { data: { session: null }, error: null }
+    ).then(async ({ data: { session } }) => {
       setSession(session)
       if (session?.access_token) {
         const profile = await fetchUserProfile(session.access_token)
         setUser(profile)
       }
-      setIsInitializing(false)
-    }).catch(() => {
-      // Supabase unreachable (e.g. env vars not set) — let the app load anyway
+    }).catch(err => {
+      console.error('[Auth] getSession error:', err)
+    }).finally(() => {
       setIsInitializing(false)
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
+        console.log('[Auth] state change:', _event, !!session)
         setSession(session)
         if (session?.access_token) {
           const profile = await fetchUserProfile(session.access_token)
@@ -79,11 +96,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [])
 
   const login = useCallback(async (email: string, password: string) => {
+    console.log('[Auth] login attempt:', email)
     setIsLoading(true)
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password })
-      if (error) throw error
-      // onAuthStateChange will set session + user
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+      console.log('[Auth] signInWithPassword result:', { user: data?.user?.email, error: error?.message })
+      if (error) {
+        toast.error(error.message)
+        throw error
+      }
+      toast.success('Welcome back!')
+      // onAuthStateChange fires automatically — sets session + fetches profile
     } finally {
       setIsLoading(false)
     }
@@ -105,11 +128,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [user]
   )
 
+  // isAuthenticated is based on Supabase session, NOT backend profile fetch.
+  // This ensures that a working Supabase setup lets users reach the dashboard
+  // even if the backend /auth/me endpoint is temporarily unavailable.
+  const isAuthenticated = !!session
+
   return (
     <AuthContext.Provider value={{
       user,
       session,
-      isAuthenticated: !!user,
+      isAuthenticated,
       isLoading,
       isInitializing,
       login,
