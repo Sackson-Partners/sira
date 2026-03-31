@@ -1,7 +1,5 @@
 import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios'
-
-// Token key must match the key used by AuthContext
-const TOKEN_STORAGE_KEY = 'sira_access_token'
+import { supabase } from '../utils/supabase'
 
 // API base URL — empty string means same-origin requests.
 // Local dev: Vite proxy forwards /api/* to localhost:8000 (see vite.config.ts)
@@ -15,27 +13,24 @@ export const api: AxiosInstance = axios.create({
   },
 })
 
-// Request interceptor to add auth token
+// Request interceptor — attach Supabase session token
 api.interceptors.request.use(
-  (config: InternalAxiosRequestConfig) => {
-    const token = localStorage.getItem(TOKEN_STORAGE_KEY)
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`
+  async (config: InternalAxiosRequestConfig) => {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (session?.access_token) {
+      config.headers.Authorization = `Bearer ${session.access_token}`
     }
     return config
   },
   (error) => Promise.reject(error)
 )
 
-// Response interceptor for error handling
+// Response interceptor — sign out on 401
 api.interceptors.response.use(
   (response) => response,
-  (error: AxiosError) => {
+  async (error: AxiosError) => {
     if (error.response?.status === 401) {
-      // Token expired or invalid — clear all auth state and redirect to login
-      localStorage.removeItem('sira_access_token')
-      localStorage.removeItem('sira_refresh_token')
-      localStorage.removeItem('sira_user')
+      await supabase.auth.signOut()
       window.location.href = '/login'
     }
     return Promise.reject(error)

@@ -104,7 +104,7 @@ async def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db)
 ):
-    """Get current authenticated user from token"""
+    """Verify Supabase JWT and return the matching PostgreSQL user (looked up by email)."""
     from app.models.user import User
 
     credentials_exception = HTTPException(
@@ -113,19 +113,38 @@ async def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
 
+    # Verify as Supabase JWT first; fall back to legacy custom JWT
+    email: str | None = None
     try:
-        payload = decode_token(token)
-        username: str = payload.get("sub")
-        if username is None:
-            raise credentials_exception
-    except HTTPException:
+        payload = jwt.decode(
+            token,
+            settings.SUPABASE_JWT_SECRET,
+            algorithms=["HS256"],
+            options={"verify_aud": False},
+        )
+        email = payload.get("email")
+    except jwt.InvalidTokenError:
+        # Fall back to legacy custom JWT (issued by this app's SECRET_KEY)
+        try:
+            payload = decode_token(token)
+            username: str = payload.get("sub", "")
+            if username:
+                user = db.query(User).filter(User.username == username).first()
+                if user is None or not user.is_active:
+                    raise credentials_exception
+                return user
+        except HTTPException:
+            pass
         raise credentials_exception
 
-    user = db.query(User).filter(User.username == username).first()
+    if not email:
+        raise credentials_exception
+
+    user = db.query(User).filter(User.email == email).first()
     if user is None:
         raise credentials_exception
     if not user.is_active:
-        raise HTTPException(status_code=400, detail="Inactive user")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Inactive user")
 
     return user
 
