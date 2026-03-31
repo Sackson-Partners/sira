@@ -12,14 +12,16 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.core.config import settings
-from app.core.database import Base
+from app.core.database import Base, _normalize_db_url
 from app.models import *  # Import all models
 
 # Alembic Config object
 config = context.config
 
-# Override sqlalchemy.url with environment variable
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+# Override sqlalchemy.url with environment variable.
+# _normalize_db_url percent-encodes passwords that contain special chars
+# (e.g. '@' or '!') which would otherwise break URL parsing.
+config.set_main_option("sqlalchemy.url", _normalize_db_url(settings.DATABASE_URL or "sqlite:///./sira.db"))
 
 # Interpret the config file for Python logging
 if config.config_file_name is not None:

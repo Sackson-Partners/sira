@@ -12,9 +12,43 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+
+def _normalize_db_url(url: str) -> str:
+    """Normalise a DATABASE_URL so passwords containing special characters
+    (e.g. '@' or '!') don't break URL parsing.
+
+    Strategy: split on the *last* '@' to find the real host boundary, then
+    percent-encode the username and password portions.  Safe to call on URLs
+    that are already correctly encoded — urllib.parse.unquote+quote is
+    idempotent when applied to a properly encoded string.
+    """
+    if not url or url.startswith("sqlite"):
+        return url
+    try:
+        from urllib.parse import quote, unquote
+        scheme_end = url.index("://") + 3
+        scheme = url[:scheme_end]
+        rest = url[scheme_end:]
+        # Everything before the first '/' is the netloc
+        slash = rest.find("/")
+        netloc, path = (rest[:slash], rest[slash:]) if slash != -1 else (rest, "")
+        last_at = netloc.rfind("@")
+        if last_at == -1:
+            return url  # no credentials in URL
+        credentials, hostpart = netloc[:last_at], netloc[last_at + 1:]
+        colon = credentials.find(":")
+        if colon == -1:
+            return url
+        raw_user = unquote(credentials[:colon])
+        raw_pass = unquote(credentials[colon + 1:])
+        return f"{scheme}{quote(raw_user, safe='')}:{quote(raw_pass, safe='')}@{hostpart}{path}"
+    except Exception:
+        return url  # if anything goes wrong, return original and let SQLAlchemy report it
+
+
 # Resolve the database URL: empty string (e.g. CI with DATABASE_URL="") falls
 # back to SQLite so the module can be imported without a real database.
-_DATABASE_URL = settings.DATABASE_URL or "sqlite:///./sira.db"
+_DATABASE_URL = _normalize_db_url(settings.DATABASE_URL or "sqlite:///./sira.db")
 # Fix asyncpg URLs — this engine is sync-only (psycopg2).
 if _DATABASE_URL.startswith("postgresql+asyncpg://"):
     _DATABASE_URL = _DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
