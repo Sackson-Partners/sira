@@ -241,6 +241,8 @@ jobs:
           alembic upgrade head
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          ENVIRONMENT: staging
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Job 4 — Deploy App (fast path — update image only)
@@ -287,6 +289,8 @@ jobs:
           alembic upgrade head
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          ENVIRONMENT: staging
 
       - name: Update Container App image
         run: |
