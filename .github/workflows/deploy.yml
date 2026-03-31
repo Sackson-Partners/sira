@@ -237,7 +237,7 @@ jobs:
       - name: Run Alembic migrations
         working-directory: backend
         run: |
-          pip install alembic psycopg2-binary
+          pip install -r requirements.txt
           alembic upgrade head
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -283,7 +283,7 @@ jobs:
       - name: Run Alembic migrations
         working-directory: backend
         run: |
-          pip install alembic psycopg2-binary
+          pip install -r requirements.txt
           alembic upgrade head
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
