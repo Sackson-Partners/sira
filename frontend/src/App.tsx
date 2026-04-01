@@ -1,9 +1,8 @@
-import React from 'react'
+import React, { lazy, Suspense } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth, AuthProvider } from './context/AuthContext'
 import Layout from './components/Layout'
 import AuthLogin from './pages/auth/Login'
-import Dashboard from './pages/Dashboard'
 import Alerts from './pages/Alerts'
 import Cases from './pages/Cases'
 import Movements from './pages/Movements'
@@ -18,15 +17,31 @@ import ProtectedRoute from './components/ProtectedRoute'
 import Unauthorized from './pages/Unauthorized'
 import RoleDashboard from './pages/dashboards/RoleDashboard'
 
+const Welcome = lazy(() => import('./pages/Welcome'))
+
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth()
   return isAuthenticated ? <>{children}</> : <Navigate to="/login" />
+}
+
+// Shows the welcome map to unauthenticated visitors; sends logged-in users to /dashboard
+function WelcomeOrDashboard() {
+  const { isAuthenticated } = useAuth()
+  if (isAuthenticated) return <Navigate to="/dashboard" replace />
+  return (
+    <Suspense fallback={null}>
+      <Welcome />
+    </Suspense>
+  )
 }
 
 function App() {
   return (
     <AuthProvider>
       <Routes>
+        {/* Public welcome map */}
+        <Route path="/" element={<WelcomeOrDashboard />} />
+
         <Route path="/login" element={<AuthLogin />} />
         <Route path="/auth/login" element={<AuthLogin />} />
         <Route path="/unauthorized" element={<Unauthorized />} />
@@ -44,7 +59,6 @@ function App() {
             <PrivateRoute>
               <Layout>
                 <Routes>
-                  <Route path="/" element={<Dashboard />} />
                   <Route path="/control-tower" element={<ControlTower />} />
                   <Route path="/shipments" element={<ShipmentWorkspace />} />
                   <Route path="/fleet" element={<FleetManagement />} />
