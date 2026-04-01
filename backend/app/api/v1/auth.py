@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone, timedelta
+from uuid import uuid4
 import secrets
 import logging
 
@@ -27,7 +28,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 MAX_FAILED_ATTEMPTS = 5
-LOCKOUT_MINUTES = 30
 ACCESS_TOKEN_EXPIRE_MINUTES = 15  # shorter for new /login endpoint
 
 
@@ -54,14 +54,23 @@ def _check_lockout(user: User):
             )
 
 
+def _lockout_minutes(failed_attempts: int) -> int:
+    """M7: Exponential backoff — lockout doubles with each batch of failures."""
+    if failed_attempts < MAX_FAILED_ATTEMPTS:
+        return 0
+    excess = failed_attempts - MAX_FAILED_ATTEMPTS  # 0-based exponent
+    return min(30 * (2 ** excess), 1440)  # cap at 24 hours
+
+
 def _handle_failed_login(user: User, db: Session):
-    """Increment failure counter and lock if threshold reached."""
+    """Increment failure counter and apply exponential lockout if threshold reached."""
     if user.failed_login_attempts is None:
         user.failed_login_attempts = 0
     user.failed_login_attempts += 1
-    if user.failed_login_attempts >= MAX_FAILED_ATTEMPTS:
+    lockout = _lockout_minutes(user.failed_login_attempts)
+    if lockout > 0:
         user.is_locked = True
-        user.locked_until = datetime.now(timezone.utc) + timedelta(minutes=LOCKOUT_MINUTES)
+        user.locked_until = datetime.now(timezone.utc) + timedelta(minutes=lockout)
     db.commit()
 
 
@@ -76,17 +85,33 @@ def _handle_successful_login(user: User, request: Request, db: Session):
     db.commit()
 
 
-def _build_token_response(user: User) -> TokenResponse:
-    """Build the full token response for a successful login."""
-    token_data = {"sub": user.username, "role": user.role, "user_id": user.id}
+def _build_token_response(user: User, db: Session | None = None) -> TokenResponse:
+    """Build the full token response for a successful login.
+
+    H2: embeds token_version in access token so password changes invalidate old tokens.
+    L1: generates a fresh JTI for the refresh token and persists it to the DB.
+    """
+    token_data = {
+        "sub": user.username,
+        "role": user.role,
+        "user_id": user.id,
+        "ver": user.token_version or 0,   # H2: token version
+    }
     if user.organization_id:
         token_data["org_id"] = user.organization_id
+
+    # L1: rotate refresh token JTI on every fresh login
+    jti = str(uuid4())
+    token_data_refresh = {**token_data, "jti": jti}
+    if db is not None:
+        user.refresh_token_jti = jti
+        db.commit()
 
     access_token = create_access_token(
         data=token_data,
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     )
-    refresh_token = create_refresh_token(data=token_data)
+    refresh_token = create_refresh_token(data=token_data_refresh)
 
     user_resp = UserAuthResponse(
         id=user.id,
@@ -150,7 +175,7 @@ async def login_email(
 
     _handle_successful_login(user, request, db)
     logger.info(f"Login: user_id={user.id} role={user.role}")
-    return _build_token_response(user)
+    return _build_token_response(user, db)
 
 
 # ── LEGACY: Username/password form login (kept for backward compatibility) ────
@@ -262,7 +287,12 @@ async def refresh_token_v2(
         if not user or not user.is_active:
             raise HTTPException(status_code=401, detail="User not found or inactive")
 
-        return _build_token_response(user)
+        # L1: validate refresh token JTI to detect token reuse after rotation
+        token_jti = payload.get("jti")
+        if token_jti and user.refresh_token_jti and token_jti != user.refresh_token_jti:
+            raise HTTPException(status_code=401, detail="Refresh token already used or revoked")
+
+        return _build_token_response(user, db)
     except HTTPException:
         raise
     except Exception:
@@ -308,11 +338,41 @@ async def reset_password(
     body: PasswordResetConfirm,
     db: Session = Depends(get_db)
 ):
-    """Reset password using reset token."""
-    raise HTTPException(
+    """H1: Reset password using the token from /forgot-password email."""
+    # Constant-time error to avoid timing oracle
+    invalid_exc = HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail="Invalid or expired reset token"
+        detail="Invalid or expired reset token",
     )
+
+    # Only query users with a non-expired reset token
+    candidates = db.query(User).filter(
+        User.password_reset_token.isnot(None),
+        User.password_reset_expires > datetime.now(timezone.utc),
+    ).all()
+
+    matched_user = None
+    for candidate in candidates:
+        if verify_password(body.token, candidate.password_reset_token):
+            matched_user = candidate
+            break
+
+    if not matched_user:
+        raise invalid_exc
+
+    # Apply the new password and invalidate the reset token
+    matched_user.hashed_password = hash_password(body.new_password)
+    matched_user.password_reset_token = None
+    matched_user.password_reset_expires = None
+    matched_user.must_change_password = False
+    # H2: increment token_version to invalidate all previously issued access tokens
+    matched_user.token_version = (matched_user.token_version or 0) + 1
+    # L1: clear refresh JTI so any live refresh tokens are also revoked
+    matched_user.refresh_token_jti = None
+    db.commit()
+
+    logger.info(f"Password reset completed: user_id={matched_user.id}")
+    return {"message": "Password reset successfully. Please log in with your new password."}
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
@@ -383,12 +443,15 @@ async def change_password(
         )
 
     current_user.hashed_password = hash_password(password_data.new_password)
-    if hasattr(current_user, 'must_change_password'):
-        current_user.must_change_password = False
+    current_user.must_change_password = False
+    # H2: invalidate all previously issued access tokens
+    current_user.token_version = (current_user.token_version or 0) + 1
+    # L1: revoke any live refresh tokens
+    current_user.refresh_token_jti = None
     db.commit()
 
     logger.info(f"Password changed: user_id={current_user.id}")
-    return {"message": "Password changed successfully"}
+    return {"message": "Password changed successfully. Please log in again."}
 
 
 @router.get("/me", response_model=UserResponse)
