@@ -28,7 +28,15 @@ logger = logging.getLogger(__name__)
 
 # Environment variables
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@localhost/sira_db")
-SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY or len(SECRET_KEY) < 32:
+    import sys
+    print(
+        "FATAL: SECRET_KEY env var is missing or too short (minimum 32 chars). "
+        "Generate one with: openssl rand -hex 32",
+        file=sys.stderr,
+    )
+    sys.exit(1)
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
