@@ -11,8 +11,8 @@ from app.services.websocket_manager import ConnectionManager, WebSocketManager
 
 
 def run(coro):
-    """Run a coroutine in the default event loop for sync test methods."""
-    return asyncio.get_event_loop().run_until_complete(coro)
+    """Run a coroutine in a fresh event loop to avoid loop pollution from anyio tests."""
+    return asyncio.run(coro)
 
 
 # ─── ConnectionManager ────────────────────────────────────────────────────────

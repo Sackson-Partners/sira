@@ -10,5 +10,11 @@ export default defineConfig({
     coverage: {
       reporter: ['text', 'json', 'html'],
     },
+    env: {
+      VITE_SUPABASE_URL: 'https://test-placeholder.supabase.co',
+      VITE_SUPABASE_ANON_KEY: 'test-anon-key-for-testing-only',
+      VITE_API_URL: '',
+      VITEST: 'true',
+    },
   },
 })
