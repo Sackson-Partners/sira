@@ -62,7 +62,7 @@ if is_sqlite:
         _DATABASE_URL,
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
-        echo=settings.DEBUG,
+        echo=(settings.DEBUG and settings.ENVIRONMENT != "production"),
     )
 else:
     engine = create_engine(
@@ -71,7 +71,7 @@ else:
         pool_size=settings.DB_POOL_SIZE,
         max_overflow=settings.DB_MAX_OVERFLOW,
         poolclass=QueuePool,
-        echo=settings.DEBUG,
+        echo=(settings.DEBUG and settings.ENVIRONMENT != "production"),
         connect_args={"connect_timeout": 5},
     )
 

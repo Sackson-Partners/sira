@@ -32,14 +32,15 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
-    # CORS
-    ALLOWED_ORIGINS: str = "*"
+    # CORS — no wildcard default; set ALLOWED_ORIGINS=https://yourdomain.com in env
+    ALLOWED_ORIGINS: str = ""
 
     @property
     def cors_origins(self) -> List[str]:
-        if self.ALLOWED_ORIGINS.strip() == "*":
+        raw = self.ALLOWED_ORIGINS.strip()
+        if raw == "*":
             return ["*"]
-        return [origin.strip() for origin in self.ALLOWED_ORIGINS.split(",")]
+        return [o.strip() for o in raw.split(",") if o.strip()]
 
     # Email (SMTP)
     SMTP_HOST: Optional[str] = None
@@ -85,10 +86,10 @@ class Settings(BaseSettings):
     AI_MODEL: str = "claude-sonnet-4-5"
     AI_MAX_TOKENS: int = 4096
 
-    # Supabase (optional — only needed when using Supabase JWT auth)
+    # Supabase (required when ENVIRONMENT != development and Supabase auth is in use)
     SUPABASE_URL: Optional[str] = None
     SUPABASE_SERVICE_KEY: Optional[str] = None
-    SUPABASE_JWT_SECRET: Optional[str] = None
+    SUPABASE_JWT_SECRET: Optional[str] = None  # validated at startup via _validate_supabase
 
     # Mapbox
     MAPBOX_ACCESS_TOKEN: Optional[str] = None

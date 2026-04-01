@@ -69,8 +69,11 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'sira-auth',
+      // H6: token is NOT persisted to localStorage — it lives in memory only.
+      // Persisting JWTs to localStorage exposes them to XSS token theft.
+      // isAuthenticated is persisted only to restore UI state on page refresh;
+      // the actual token is re-obtained via /refresh or re-login as needed.
       partialize: (state) => ({
-        token: state.token,
         isAuthenticated: state.isAuthenticated,
       }),
     }

@@ -8,7 +8,7 @@ from typing import Optional, Dict, Any, List
 import jwt
 from jwt.exceptions import InvalidTokenError
 from passlib.context import CryptContext
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 import logging
@@ -101,52 +101,105 @@ def decode_token(token: str) -> Dict[str, Any]:
 
 
 async def get_current_user(
+    request: Request,
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db)
 ):
-    """Verify Supabase JWT and return the matching PostgreSQL user (looked up by email)."""
-    from app.models.user import User
+    """Verify Supabase JWT or legacy custom JWT and return the matching user.
 
+    Security properties enforced here:
+      H2  — token_version mismatch rejects tokens issued before a password change
+      H3  — Supabase audience "authenticated" verified when SUPABASE_JWT_SECRET is set
+      M5  — must_change_password blocks all endpoints except /change-password & /logout
+    """
+    from app.models.user import User
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
 
-    # Verify as Supabase JWT first; fall back to legacy custom JWT
-    email: str | None = None
-    try:
-        payload = jwt.decode(
-            token,
-            settings.SUPABASE_JWT_SECRET,
-            algorithms=["HS256"],
-            options={"verify_aud": False},
-        )
-        email = payload.get("email")
-    except jwt.InvalidTokenError:
-        # Fall back to legacy custom JWT (issued by this app's SECRET_KEY)
+    # ── Path 1: Supabase JWT ──────────────────────────────────────────────────
+    # H3: audience verification enabled — Supabase tokens carry aud="authenticated"
+    if settings.SUPABASE_JWT_SECRET:
         try:
-            payload = decode_token(token)
-            username: str = payload.get("sub", "")
-            if username:
-                user = db.query(User).filter(User.username == username).first()
-                if user is None or not user.is_active:
+            payload = jwt.decode(
+                token,
+                settings.SUPABASE_JWT_SECRET,
+                algorithms=["HS256"],
+                audience="authenticated",
+            )
+            email: str | None = payload.get("email")
+            if email:
+                user = db.query(User).filter(User.email == email).first()
+                if user is None:
                     raise credentials_exception
+                if not user.is_active:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Inactive user",
+                    )
+                _enforce_must_change_password(user, request)
                 return user
-        except HTTPException:
-            pass
+        except jwt.InvalidTokenError:
+            pass  # fall through to legacy path
+
+    # ── Path 2: legacy custom JWT (issued by this app's SECRET_KEY) ──────────
+    try:
+        payload = decode_token(token)
+        username: str = payload.get("sub", "")
+        if not username:
+            raise credentials_exception
+
+        user = db.query(User).filter(User.username == username).first()
+        if user is None or not user.is_active:
+            raise credentials_exception
+
+        # H2: validate token_version — mismatch means token was issued before
+        #     the last password change and must be rejected
+        token_ver: int = payload.get("ver", 0)
+        if token_ver != (user.token_version or 0):
+            raise credentials_exception
+
+        _enforce_must_change_password(user, request)
+        return user
+    except HTTPException:
+        raise
+    except Exception:
         raise credentials_exception
 
-    if not email:
-        raise credentials_exception
 
-    user = db.query(User).filter(User.email == email).first()
-    if user is None:
-        raise credentials_exception
-    if not user.is_active:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Inactive user")
+def _enforce_must_change_password(user, request: Request) -> None:
+    """M5: Raise 403 if the account requires a password change.
 
-    return user
+    The /change-password and /logout endpoints are explicitly exempted so the
+    user can actually satisfy the requirement without being locked out entirely.
+    """
+    if not getattr(user, "must_change_password", False):
+        return
+    exempt_suffixes = ("/change-password", "/logout", "/auth/me")
+    path = request.url.path
+    if not any(path.endswith(suffix) for suffix in exempt_suffixes):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"message": "Password change required before continuing.", "code": "MUST_CHANGE_PASSWORD"},
+        )
+
+
+def require_same_org(resource_org_id: int, current_user) -> None:
+    """M8: Raise 403 if current_user does not belong to resource_org_id.
+
+    Platform admins (super_admin / admin) are exempt.
+    Call this at the start of any endpoint that accesses org-scoped data.
+    """
+    platform_admin_roles = {"admin", "super_admin"}
+    if current_user.role in platform_admin_roles:
+        return
+    if current_user.organization_id != resource_org_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: resource belongs to a different organisation.",
+        )
 
 
 def require_role(allowed_roles: list):

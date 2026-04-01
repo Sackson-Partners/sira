@@ -30,6 +30,10 @@ class User(Base):
 
     # Security
     must_change_password = Column(Boolean, default=False)
+    # H2: incremented on password change to invalidate all previously issued tokens
+    token_version = Column(Integer, default=0, nullable=False)
+    # L1: JTI of the active refresh token — rotated on every /refresh call
+    refresh_token_jti = Column(String(36), nullable=True)
     last_login = Column(DateTime(timezone=True), nullable=True)
     last_login_ip = Column(String(45), nullable=True)
     password_reset_token = Column(String(255), nullable=True)

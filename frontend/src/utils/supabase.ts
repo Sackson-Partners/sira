@@ -3,16 +3,14 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.error(
-    '[SIRA] VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY is not set. ' +
-    'Add them as environment variables in Vercel and redeploy.'
+// M6: fail loudly — a misconfigured Supabase client silently lets all auth calls
+// hit a placeholder project, making login appear broken without a clear error.
+if (!supabaseUrl || supabaseUrl.includes('placeholder') || !supabaseAnonKey || supabaseAnonKey.includes('placeholder')) {
+  throw new Error(
+    '[SIRA] VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY must be set. ' +
+    'Copy .env.example to .env.local and fill in your Supabase project values, ' +
+    'or run `vercel env pull .env.local` to sync them from Vercel.'
   )
 }
 
-// Use placeholders when env vars are missing so the app loads and shows a
-// proper error message instead of crashing with a blank white screen.
-export const supabase = createClient(
-  supabaseUrl ?? 'https://placeholder.supabase.co',
-  supabaseAnonKey ?? 'placeholder-anon-key'
-)
+export const supabase = createClient(supabaseUrl, supabaseAnonKey)

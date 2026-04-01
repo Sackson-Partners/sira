@@ -9,8 +9,10 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.base import BaseHTTPMiddleware
 from pathlib import Path
 import logging
+import os
 
 from app.core.config import settings
 from app.core.database import init_db
@@ -44,6 +46,17 @@ try:
     from app.core.database import SessionLocal
     from app.core.security import hash_password
     from app.models.user import User
+
+    admin_password = os.getenv("ADMIN_INITIAL_PASSWORD")
+    if not admin_password:
+        if settings.ENVIRONMENT == "production":
+            raise RuntimeError(
+                "ADMIN_INITIAL_PASSWORD must be set in production. "
+                "Refusing to start with no admin credentials."
+            )
+        logger.warning("ADMIN_INITIAL_PASSWORD not set — using placeholder (dev only).")
+        admin_password = "changeme-set-ADMIN_INITIAL_PASSWORD"
+
     db = SessionLocal()
     try:
         if not db.query(User).filter(User.username == "admin").first():
@@ -51,13 +64,14 @@ try:
                 username="admin",
                 email="admin@sira.com",
                 full_name="SIRA Administrator",
-                hashed_password=hash_password("admin123"),
+                hashed_password=hash_password(admin_password),
                 role="admin",
                 is_active=True,
+                must_change_password=True,
             )
             db.add(admin)
             db.commit()
-            logger.info("Admin user created (admin / admin123)")
+            logger.info("Admin user created from ADMIN_INITIAL_PASSWORD env var.")
         else:
             logger.info("Admin user already exists")
     except Exception as e:
@@ -68,14 +82,45 @@ try:
 except Exception as e:
     logger.error(f"Database initialization failed: {e}")
 
-# CORS middleware
+# CORS middleware — origins from ALLOWED_ORIGINS env var (no wildcard in production)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.cors_origins,
     allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
 )
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Attach security headers to every response (mirrors app/main.py)."""
+
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+        if settings.ENVIRONMENT == "production":
+            response.headers["Strict-Transport-Security"] = (
+                "max-age=31536000; includeSubDomains; preload"
+            )
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'none'; "
+            "script-src 'self'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; "
+            "connect-src 'self'; "
+            "font-src 'self'; "
+            "frame-ancestors 'none'; "
+            "base-uri 'self'; "
+            "form-action 'self'"
+        )
+        return response
+
+
+app.add_middleware(SecurityHeadersMiddleware)
 
 
 @app.exception_handler(Exception)
