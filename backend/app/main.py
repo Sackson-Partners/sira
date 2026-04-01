@@ -122,6 +122,13 @@ async def lifespan(app: FastAPI):
     """Application lifespan events"""
     # Startup
     logger.info("Starting SIRA Platform API...")
+    # M2: warn loudly if Supabase JWT secret is absent in non-development environments
+    if settings.ENVIRONMENT != "development" and not settings.SUPABASE_JWT_SECRET:
+        logger.warning(
+            "SUPABASE_JWT_SECRET is not set. Supabase JWT verification will be disabled "
+            "and all tokens will be validated against SECRET_KEY only. "
+            "Set SUPABASE_JWT_SECRET in production."
+        )
     try:
         init_db()
         _ensure_admin_user()
