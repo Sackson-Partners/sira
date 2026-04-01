@@ -11,10 +11,11 @@ export default defineConfig({
       reporter: ['text', 'json', 'html'],
     },
     env: {
-      VITE_SUPABASE_URL: 'https://test-placeholder.supabase.co',
-      VITE_SUPABASE_ANON_KEY: 'test-anon-key-for-testing-only',
-      VITE_API_URL: '',
       VITEST: 'true',
+      VITE_SUPABASE_URL: 'https://placeholder-for-tests.supabase.co',
+      VITE_SUPABASE_ANON_KEY: 'placeholder-anon-key-for-tests-only',
+      VITE_API_URL: '',
+      NODE_ENV: 'test',
     },
   },
 })

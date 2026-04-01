@@ -67,7 +67,7 @@ jobs:
           DATABASE_URL: postgresql://sira_user:${{ secrets.CI_DB_PASSWORD }}@localhost:5432/sira_test_db
           SECRET_KEY: ${{ secrets.CI_SECRET_KEY }}
         run: |
-          pytest tests/ -v --cov=app --cov-report=xml --cov-report=term-missing
+          pytest tests/ -v --cov=app --cov-report=xml --cov-report=term-missing --cov-fail-under=80
 
       - name: Upload coverage
         uses: codecov/codecov-action@v4
@@ -125,6 +125,12 @@ jobs:
 
       - name: Run tests
         working-directory: ./frontend
+        env:
+          VITEST: 'true'
+          VITE_SUPABASE_URL: 'https://placeholder-for-tests.supabase.co'
+          VITE_SUPABASE_ANON_KEY: 'placeholder-anon-key-for-tests-only'
+          VITE_API_URL: ''
+          NODE_ENV: test
         run: npm run test:ci
 
       - name: Build
