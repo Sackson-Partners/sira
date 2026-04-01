@@ -1,6 +1,44 @@
+@import "leaflet/dist/leaflet.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ── Leaflet map ──────────────────────────────────────────────────────────── */
+
+.leaflet-container {
+  width: 100%;
+  height: 100%;
+  background: #070e1a;
+}
+
+/* SIRA popup skin */
+.sira-popup .leaflet-popup-content-wrapper {
+  background: rgba(7, 14, 26, 0.95) !important;
+  color: #e2e8f0 !important;
+  border: 1px solid rgba(0, 255, 204, 0.25) !important;
+  border-radius: 10px !important;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6) !important;
+}
+.sira-popup .leaflet-popup-tip {
+  background: rgba(7, 14, 26, 0.95) !important;
+}
+.sira-popup .leaflet-popup-content {
+  margin: 12px 14px !important;
+}
+
+/* Attribution */
+.leaflet-control-attribution {
+  background: rgba(0, 0, 0, 0.5) !important;
+  color: #334155 !important;
+  font-size: 9px !important;
+}
+
+/* Custom scrollbar for sidebar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: #070e1a; }
+::-webkit-scrollbar-thumb { background: rgba(0, 255, 204, 0.3); border-radius: 2px; }
 
 @layer components {
   .card {
